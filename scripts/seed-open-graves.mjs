@@ -57,8 +57,7 @@ async function searchRepos(query) {
 
 function describe(repo) {
   const base = repo.description?.trim() || `${repo.name} — an abandoned ${repo.language || ''} project.`;
-  const years = Math.max(1, Math.round((Date.now() - new Date(repo.pushed_at)) / (365 * 86400000)));
-  return `${base}\n\nOriginally built by @${repo.owner.login}. ${repo.archived ? 'Archived by its owner' : 'Untouched'} for about ${years} year${years === 1 ? '' : 's'}. Licensed ${repo.license.spdx_id}, so anyone may fork and revive it with attribution.`;
+  return `${base}\n\nOriginally built by @${repo.owner.login}. ${repo.archived ? 'Archived (made read-only) by its owner' : 'No longer maintained'}. Licensed ${repo.license.spdx_id}, so anyone may fork and revive it with attribution.`;
 }
 
 function tagsFor(repo) {
@@ -113,7 +112,9 @@ async function main() {
 
       const existing = await prisma.project.findFirst({ where: { githubRepoUrl: url } });
       if (existing) {
-        await prisma.project.update({ where: { id: existing.id }, data: intelligence });
+        const data = { ...intelligence };
+        if (existing.source === 'OPEN_GRAVE') data.description = describe(repo);
+        await prisma.project.update({ where: { id: existing.id }, data });
         refreshed += 1;
         console.log('refreshed');
         continue;

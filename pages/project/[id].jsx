@@ -473,11 +473,30 @@ export default function ProjectDetails({ projectId }) {
       </Link>
 
       {/* Escrow Pipeline Tracker */}
-      <EscrowStatusBanner
-        status={project.status}
-        activeCommitment={activeCommitment}
-        reviewTimeoutAt={project.reviewTimeoutAt}
-      />
+      {isOpenGrave ? (
+        <div className="sketch-card-static" style={{ padding: '14px 18px', marginBottom: 22, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
+          {[
+            { key: 'LISTED', label: '🪦 Dead' },
+            { key: 'ACTIVE', label: '🌱 Claimed & being revived' },
+            { key: 'COMPLETED', label: '✨ Revived (fork verified)' }
+          ].map((stage, i, all) => {
+            const order = ['LISTED', 'ACTIVE', 'COMPLETED'];
+            const reached = order.indexOf(project.status) >= order.indexOf(stage.key);
+            return (
+              <React.Fragment key={stage.key}>
+                <span style={{ fontWeight: reached ? 800 : 400, opacity: reached ? 1 : 0.45 }}>{stage.label}</span>
+                {i < all.length - 1 && <span style={{ opacity: 0.4 }}>→</span>}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      ) : (
+        <EscrowStatusBanner
+          status={project.status}
+          activeCommitment={activeCommitment}
+          reviewTimeoutAt={project.reviewTimeoutAt}
+        />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 32, alignItems: 'start' }}>
         {/* Left Column: Codebase Details */}
@@ -687,8 +706,8 @@ export default function ProjectDetails({ projectId }) {
                       </div>
                     </div>
                     <p style={{ margin: '14px 0 0', color: 'var(--text-muted)', fontSize: 12.5, lineHeight: 1.5 }}>
-                      How revivable it is, from real GitHub data: documentation (25%), recent development (25%), community size (20%),
-                      adoption via stars and forks (15%), and share of issues that got closed (15%). Analyzed {new Date(github.analyzedAt).toLocaleDateString()}.
+                      How revivable it is, from real GitHub data: how recently it died (25%), README depth (20%), how many people
+                      worked on it (20%), share of issues that got closed (20%), and stars/forks (15%). Analyzed {new Date(github.analyzedAt).toLocaleDateString()}.
                     </p>
                   </section>
 
@@ -708,7 +727,9 @@ export default function ProjectDetails({ projectId }) {
                       <div><div className="label">Peak Month</div><strong>{github.peakMonth || 'Unavailable'}</strong></div>
                       <div><div className="label">Commits</div><strong>{github.peakCommits ?? 0}</strong></div>
                       <div><div className="label">Contributors</div><strong>{github.peakContributors ?? 0}</strong></div>
-                      <div><div className="label">Pull Requests</div><strong>{github.peakPullRequests ?? 0}</strong></div>
+                      {github.peakPullRequests != null && (
+                        <div><div className="label">Pull Requests</div><strong>{github.peakPullRequests}</strong></div>
+                      )}
                     </div>
                   </section>
                 </div>

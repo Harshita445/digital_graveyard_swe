@@ -14,7 +14,10 @@
     "seed": "node prisma/seed.js",
     "test": "node scripts/test-all.js",
     "test:graphql": "node scripts/test-graphql.js",
-    "generate:pdf": "node scripts/generate-pdf.js"
+    "generate:pdf": "node scripts/generate-pdf.js",
+    "db:local": "node scripts/local-db.mjs",
+    "dev:local": "node scripts/local-db.mjs --dev",
+    "seed:graves": "node scripts/seed-open-graves.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -29,6 +32,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "embedded-postgres": "^18.6.0-beta.19",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.23",
     "prisma": "^5.22.0"
