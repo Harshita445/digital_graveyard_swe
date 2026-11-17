@@ -118,7 +118,7 @@ export default function Dashboard() {
     { id: 'overview', label: 'Overview', icon: 'grid' },
     { id: 'owned', label: `My Listed Code (${ownedProjects.length})`, icon: 'layers', badge: pendingIncoming.length + pendingVerifications.length },
     { id: 'commitments', label: `My Claims & Work (${commitments.length})`, icon: 'lock', badge: activeCommitments.length },
-    { id: 'ledger', label: `Escrow Ledger (${ledger.length})`, icon: 'activity' },
+    { id: 'ledger', label: `Credit Ledger (${ledger.length})`, icon: 'activity' },
     { id: 'anonymity', label: 'Anonymity & Account', icon: 'shield' }
   ];
 
@@ -411,7 +411,7 @@ export default function Dashboard() {
                 My Claims & Work in Progress
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '3px 0 0' }}>
-                Codebases where your stake is locked in blind escrow.
+                Projects you are reviving. Open graves need no stake; donated projects lock a stake until the owner approves.
               </p>
             </div>
 
@@ -445,7 +445,9 @@ export default function Dashboard() {
                           <span className={`badge-sketch badge-${c.status}`}>{c.status}</span>
                         </div>
                         <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 5 }}>
-                          Owner: {c.project?.owner?.alias} · Stake Locked: <strong style={{ color: 'var(--text)' }}>{c.stakeLocked} cr</strong>
+                          {c.project?.source === 'OPEN_GRAVE'
+                            ? <>Open grave · originally by @{c.project?.githubRepoOwner || 'unknown'} · No stake</>
+                            : <>Owner: {c.project?.owner?.alias} · Stake Locked: <strong style={{ color: 'var(--text)' }}>{c.stakeLocked} cr</strong></>}
                         </div>
                       </div>
 
@@ -464,7 +466,7 @@ export default function Dashboard() {
                           color: 'var(--text-muted)'
                         }}
                       >
-                        ⏱️ Ghost Timeout Deadline: <strong>{new Date(c.ghostDeadlineAt).toLocaleDateString()}</strong> (Deliverable must be submitted before this deadline)
+                        ⏱️ Ghost Timeout Deadline: <strong>{new Date(c.ghostDeadlineAt).toLocaleDateString()}</strong> (submit your fork before this date or the claim is released)
                       </div>
                     )}
                   </div>
@@ -479,10 +481,10 @@ export default function Dashboard() {
           <div>
             <div style={{ marginBottom: 20 }}>
               <h2 className="font-display" style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>
-                Append-Only Escrow Ledger
+                Append-Only Credit Ledger
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '3px 0 0' }}>
-                Cryptographic audit trail of all credit stake locks, refunds, rewards, and strike updates. No update or delete operations exist.
+                Every credit change on your account: sign-up bonus, stakes, refunds, rewards and reputation updates. Entries are only ever added, never edited.
               </p>
             </div>
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getLocalPersonas } from '../lib/mockFallback';
+import { getLocalPersonas, STATIC_DEMO } from '../lib/mockFallback';
 
 const AppContext = createContext(null);
 
@@ -93,9 +93,12 @@ export function AppProvider({ children }) {
         addToast(`Authenticated as ${data.user.alias}`, 'success');
         return data.user;
       }
-      const data = await res.json();
-      throw new Error(data.error || 'Login failed');
+      const data = await res.json().catch(() => ({}));
+      // The server answered (e.g. wrong password): never fake a login.
+      throw Object.assign(new Error(data.error || 'Login failed'), { fromServer: true });
     } catch (err) {
+      if (err.fromServer) throw err;
+      if (!STATIC_DEMO) throw new Error('Could not reach the server. Check your connection and try again.');
       const allPersonas = personas.length > 0 ? personas : getLocalPersonas();
       const found = allPersonas.find(p => p.email.toLowerCase() === email.toLowerCase());
       if (found) {
@@ -136,9 +139,11 @@ export function AppProvider({ children }) {
         addToast(`Account created! Assigned alias: ${data.user.alias} (+500 credits granted)`, 'success');
         return data.user;
       }
-      const data = await res.json();
-      throw new Error(data.error || 'Signup failed');
+      const data = await res.json().catch(() => ({}));
+      throw Object.assign(new Error(data.error || 'Signup failed'), { fromServer: true });
     } catch (err) {
+      if (err.fromServer) throw err;
+      if (!STATIC_DEMO) throw new Error('Could not reach the server. Check your connection and try again.');
       const newUser = {
         id: `user-${Date.now()}`,
         email,
@@ -182,10 +187,17 @@ export function AppProvider({ children }) {
         addToast(`Switched active persona to ${data.user.alias}`, 'success');
         return data.user;
       }
+      const data = await res.json().catch(() => ({}));
+      addToast(data.error || 'Could not switch persona', 'error');
+      return null;
     } catch (err) {
-      // Handled in fallback below
+      // Server unreachable (static demo build): handled in fallback below
     }
 
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      return null;
+    }
     const allPersonas = personas.length > 0 ? personas : getLocalPersonas();
     const target = allPersonas.find(p => p.id === userId);
     if (target) {

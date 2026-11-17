@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/Icons';
 import { GitBranch, Code2 } from 'lucide-react';
-import { getLocalProjects, saveLocalProjects, CATEGORIES } from '../lib/mockFallback';
+import { getLocalProjects, saveLocalProjects, CATEGORIES, STATIC_DEMO } from '../lib/mockFallback';
 
 export default function SubmitProject() {
   const router = useRouter();
@@ -87,7 +87,11 @@ export default function SubmitProject() {
         // Network failure only: handled in static demo fallback below
       }
 
-      // Demo fallback for GitHub Pages static export
+      if (!STATIC_DEMO) {
+        addToast('Could not reach the server. Check your connection and try again.', 'error');
+        return;
+      }
+      // Demo fallback for a static export build only
       const newProj = {
         id: `p-${Date.now()}`,
         ownerId: currentUser.id,

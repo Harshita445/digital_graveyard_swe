@@ -15,10 +15,7 @@ export default function Simulator() {
       const res = await fetch('/api/cron/timeout-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          secret: 'graveyard_secret_key',
-          simulateDaysElapsed: days
-        })
+        body: JSON.stringify({ simulateDaysElapsed: days })
       });
 
       const data = await res.json();
@@ -58,6 +55,10 @@ export default function Simulator() {
         <p style={{ color: 'var(--text-muted)', fontSize: 14.5, margin: 0, lineHeight: 1.6 }}>
           Digital Graveyard relies on deterministic automated timers rather than human arbiters.
           Use this console to simulate time passing, trigger the daily cron verification job, and observe automatic forfeitures, refunds, and bans in real-time.
+        </p>
+        <p style={{ marginTop: 10, padding: '10px 14px', border: '2px dashed var(--border)', borderRadius: 10, fontSize: 13, lineHeight: 1.5 }}>
+          ⚠️ Time travel changes real stakes and bans, so it only works when the app runs locally (<code>npm run dev:local</code>).
+          On the live site the timers run for real once a day.
         </p>
       </div>
 

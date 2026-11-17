@@ -262,7 +262,7 @@ export default function Home() {
                 gap: 6
               }}
             >
-              🌱 7. Revival?
+              🌱 7. Revival
             </span>
           </div>
         </section>
@@ -278,7 +278,7 @@ export default function Home() {
                 Featured Preserved Artifacts
               </h2>
               <p style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.65)', margin: '2px 0 0' }}>
-                Inspected by Project Archaeologists
+                Real abandoned repos, analyzed from their GitHub history
               </p>
             </div>
 
@@ -329,20 +329,20 @@ export default function Home() {
           <div className="sketch-card-static" style={{ padding: 22, backgroundColor: 'var(--color-paper)' }}>
             <ShieldCheck style={{ width: 28, height: 28, color: 'var(--color-ink)', marginBottom: 10, strokeWidth: 1.8 }} />
             <h3 style={{ fontFamily: 'var(--font-hand)', fontSize: 24, fontWeight: 700, margin: '0 0 6px', color: 'var(--color-ink)' }}>
-              Immutable Provenance
+              Traceable Provenance
             </h3>
             <p style={{ fontSize: 13, color: 'rgba(17, 17, 17, 0.82)', lineHeight: 1.5, margin: 0, fontFamily: 'var(--font-sans)' }}>
-              Every listing records an append-only cryptographic ownership chain tracing original creators, curators, and new adopting diggers.
+              Every grave keeps a public history: who built it, who listed it, who claimed it, and the fork that brought it back. The original author is always credited.
             </p>
           </div>
 
           <div className="sketch-card-static" style={{ padding: 22, backgroundColor: 'var(--color-paper)' }}>
             <GitFork style={{ width: 28, height: 28, color: 'var(--color-ink)', marginBottom: 10, strokeWidth: 1.8 }} />
             <h3 style={{ fontFamily: 'var(--font-hand)', fontSize: 24, fontWeight: 700, margin: '0 0 6px', color: 'var(--color-ink)' }}>
-              Fork-Friendly License
+              Only Legally Revivable Code
             </h3>
             <p style={{ fontSize: 13, color: 'rgba(17, 17, 17, 0.82)', lineHeight: 1.5, margin: 0, fontFamily: 'var(--font-sans)' }}>
-              Permissively licensed codebases (MIT/Apache/BSD) allow instant forks without transfer friction. Build on top of proven ideas.
+              Open graves are listed only if their open-source license (MIT, Apache, BSD, GPL…) already allows forking. Anything else needs the owner to donate it.
             </p>
           </div>
         </section>

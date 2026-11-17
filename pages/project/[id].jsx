@@ -7,7 +7,7 @@ import AutopsyChart, { CauseOfDeclineTags } from '../../components/AutopsyChart'
 import ProvenanceTimeline from '../../components/ProvenanceTimeline';
 import HandoverChecklist, { MilestoneTracker } from '../../components/HandoverChecklist';
 import Icon from '../../components/Icons';
-import { getLocalProjects, saveLocalProjects } from '../../lib/mockFallback';
+import { getLocalProjects, saveLocalProjects, STATIC_DEMO } from '../../lib/mockFallback';
 
 export default function ProjectDetails({ projectId }) {
   const router = useRouter();
@@ -105,6 +105,11 @@ export default function ProjectDetails({ projectId }) {
     }
 
     // Fallback for static demo mode
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -161,6 +166,11 @@ export default function ProjectDetails({ projectId }) {
     }
 
     // Fallback for static demo mode
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -211,6 +221,11 @@ export default function ProjectDetails({ projectId }) {
       // Handled in fallback
     }
 
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -252,6 +267,11 @@ export default function ProjectDetails({ projectId }) {
       // Handled in fallback
     }
 
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -304,6 +324,11 @@ export default function ProjectDetails({ projectId }) {
       // Network failure only: handled in static demo fallback below
     }
 
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -358,6 +383,11 @@ export default function ProjectDetails({ projectId }) {
       // Handled in fallback
     }
 
+    if (!STATIC_DEMO) {
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
+      setActionLoading(false);
+      return;
+    }
     const allProjects = getLocalProjects();
     const updated = allProjects.map(p => {
       if (p.id === project.id) {
@@ -591,7 +621,7 @@ export default function ProjectDetails({ projectId }) {
             {[
               { id: 'overview', label: '📋 Overview & Specs' },
               { id: 'autopsy', label: '🔬 Autopsy & Diagnostics' },
-              { id: 'handover', label: '🌱 Escrow & Handover' },
+              { id: 'handover', label: isOpenGrave ? '🌱 Claim & Revive' : '🌱 Escrow & Handover' },
               { id: 'provenance', label: '📜 Provenance Ledger' }
             ].map(tab => (
               <button
@@ -882,7 +912,7 @@ export default function ProjectDetails({ projectId }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: '1.5px solid var(--border)' }}>
               <Icon name="lock" size={17} />
               <h3 className="font-display" style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>
-                Escrow & Claim Actions
+                {isOpenGrave ? 'Claim & Revive' : 'Escrow & Claim Actions'}
               </h3>
             </div>
 
@@ -1251,7 +1281,8 @@ export default function ProjectDetails({ projectId }) {
 }
 
 export async function getStaticPaths() {
-  const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12'];
+  // Real projects are rendered on demand; the p1–p12 sample pages exist only in a static demo export.
+  const ids = process.env.NEXT_PUBLIC_STATIC_DEMO === 'true' ? ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12'] : [];
   return {
     paths: ids.map(id => ({ params: { id } })),
     fallback: process.env.GITHUB_PAGES === 'true' ? false : 'blocking'

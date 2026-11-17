@@ -9,7 +9,8 @@ import {
   parseSession,
   serializeSessionCookie,
   serializeClearCookie,
-  parseCookieHeader
+  parseCookieHeader,
+  isDemoPersona
 } from '../../../lib/auth';
 import { recordLedgerEntry } from '../../../lib/ledger';
 
@@ -85,7 +86,7 @@ async function handleLogin(req, res) {
     return res.status(200).json({
       message: 'Logged in successfully',
       token,
-      user: sanitizeUser(user)
+      user: sanitizeUser(user, true)
     });
   } catch (err) {
     console.error('Error logging in user:', err);
@@ -159,7 +160,7 @@ async function handleSignup(req, res) {
     return res.status(201).json({
       message: 'Account created successfully',
       token,
-      user: sanitizeUser(refreshedUser)
+      user: sanitizeUser(refreshedUser, true)
     });
   } catch (err) {
     console.error('Error creating user account:', err);
@@ -179,17 +180,8 @@ async function handleLogout(req, res) {
 // 4. GET /api/auth/me
 async function handleMe(req, res) {
   try {
-    let userId = parseSession(req);
-    if (!userId) {
-      const cookieHeader = req.headers.cookie;
-      if (cookieHeader) {
-        const match = cookieHeader.match(/graveyard_user_id=([^;]+)/);
-        if (match) userId = match[1];
-      }
-    }
-    if (!userId) {
-      userId = req.headers['x-user-id'];
-    }
+    // parseSession already handles the dev-only unsigned fallbacks.
+    const userId = parseSession(req);
 
     if (!userId) {
       return res.status(200).json({ authenticated: false, user: null });
@@ -205,7 +197,7 @@ async function handleMe(req, res) {
 
     return res.status(200).json({
       authenticated: true,
-      user: sanitizeUser(user)
+      user: sanitizeUser(user, true)
     });
   } catch (err) {
     console.error('Error fetching authenticated profile:', err);
@@ -217,13 +209,17 @@ async function handleMe(req, res) {
 async function handlePersonas(req, res) {
   try {
     const users = await prisma.user.findMany({
-      where: { banned: false },
+      where: {
+        banned: false,
+        githubId: null,
+        OR: [{ email: { endsWith: '@campus.edu' } }, { email: 'devbot@graveyard.fi' }]
+      },
       orderBy: { reputation: 'desc' },
       take: 8
     });
 
     return res.status(200).json({
-      personas: users.map(u => sanitizeUser(u))
+      personas: users.filter(isDemoPersona).map(u => sanitizeUser(u))
     });
   } catch (err) {
     console.error('Error listing demo personas:', err);
@@ -250,6 +246,9 @@ async function handleSwitchPersona(req, res) {
     if (!user) {
       return res.status(404).json({ error: 'User persona not found' });
     }
+    if (!isDemoPersona(user)) {
+      return res.status(403).json({ error: 'Only the shared demo personas can be switched into. Log in to use a real account.' });
+    }
 
     const token = createSessionToken(user.id, user.alias);
     res.setHeader('Set-Cookie', [
@@ -260,7 +259,7 @@ async function handleSwitchPersona(req, res) {
     return res.status(200).json({
       message: `Switched active persona to ${user.alias}`,
       token,
-      user: sanitizeUser(user)
+      user: sanitizeUser(user, true)
     });
   } catch (err) {
     console.error('Error switching active persona:', err);
@@ -285,7 +284,8 @@ async function handleGitHubInit(req, res) {
   const isProd = process.env.NODE_ENV === 'production';
   const stateCookie = `gh_oauth_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${isProd ? '; Secure' : ''}`;
 
-  const devSimulate = req.query.simulate === 'true' || req.query.dev === 'true';
+  // Fake "GitHub" logins exist for local testing only; never on the live site.
+  const devSimulate = !isProd && (req.query.simulate === 'true' || req.query.dev === 'true');
 
   if (!cleanClientId) {
     if (devSimulate) {
@@ -345,7 +345,7 @@ async function handleGitHubCallback(req, res) {
     let ghUser = null;
     let userEmail = null;
 
-    if (typeof code === 'string' && code.startsWith('mock_dev_code_')) {
+    if (typeof code === 'string' && code.startsWith('mock_dev_code_') && process.env.NODE_ENV !== 'production') {
       const mockId = `mock_${code.slice(-6)}`;
       ghUser = {
         id: 88812345,

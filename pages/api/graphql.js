@@ -3,7 +3,6 @@ import { typeDefs } from '../../lib/graphql/typeDefs.js';
 import { resolvers } from '../../lib/graphql/resolvers.js';
 import prisma from '../../lib/prisma.js';
 import { parseSession } from '../../lib/auth.js';
-import { getLocalPersonas } from '../../lib/mockFallback.js';
 
 export const config = {
   api: {
@@ -29,10 +28,7 @@ export default createYoga({
         try {
           currentUser = await prisma.user.findUnique({ where: { id: userId } });
         } catch (dbErr) {
-          // Fallback if db is unavailable
-        }
-        if (!currentUser) {
-          currentUser = getLocalPersonas().find(p => p.id === userId) || null;
+          currentUser = null;
         }
       }
     } catch (e) {

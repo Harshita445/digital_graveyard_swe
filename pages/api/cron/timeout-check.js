@@ -8,14 +8,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { secret, simulateDaysElapsed = 0 } = req.body || req.query || {};
+    const { simulateDaysElapsed = 0 } = req.body || req.query || {};
 
-    // Allow internal cron calls or simulation console
-    const validSecret = process.env.CRON_SECRET || 'graveyard_secret_key';
-    const isAuthorized = secret === validSecret || req.headers['x-cron-secret'] === validSecret || process.env.NODE_ENV !== 'production';
+    // Real runs: Vercel Cron sends "Authorization: Bearer <CRON_SECRET>".
+    // Time-travel simulation mutates real stakes and bans, so it only runs locally
+    // (or when ALLOW_SIMULATION=true is set deliberately on a throwaway deployment).
+    const validSecret = process.env.CRON_SECRET;
+    const bearer = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const isCron = Boolean(validSecret) && (bearer === validSecret || req.headers['x-cron-secret'] === validSecret);
+    const simulationAllowed = process.env.NODE_ENV !== 'production' || process.env.ALLOW_SIMULATION === 'true';
 
-    if (!isAuthorized) {
-      return res.status(401).json({ error: 'Unauthorized cron trigger' });
+    if (!isCron && !simulationAllowed) {
+      return res.status(401).json({ error: 'Simulation is disabled on the live site. Run the app locally to try it.' });
+    }
+    if (isCron && Number(simulateDaysElapsed) !== 0 && !simulationAllowed) {
+      return res.status(400).json({ error: 'Time-travel is not allowed in production.' });
     }
 
     // Effective reference date (can be shifted by simulateDaysElapsed for testing)

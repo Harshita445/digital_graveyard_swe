@@ -53,7 +53,7 @@ export default function AutopsyChart({ report }) {
             }}
           >
             <AlertTriangle style={{ width: 14, height: 14, color: 'var(--color-ink)' }} />
-            <span>Pattern: {report.declinePattern || 'Gradual Maintainer Roll-Off'}</span>
+            <span>Pattern: {report.declinePattern || 'Unknown'}</span>
           </span>
         </div>
       </div>
@@ -200,7 +200,7 @@ export function CauseOfDeclineTags({ tags = [] }) {
       case 'low-adoption':
         return { label: 'Low Adoption', icon: '🌫️' };
       case 'stale-dependencies':
-        return { label: 'Stale Dependencies', icon: '🧱' };
+        return { label: 'Untouched 3+ Years', icon: '🧱' };
       default:
         return { label: tag, icon: '📌' };
     }
@@ -218,7 +218,7 @@ export function CauseOfDeclineTags({ tags = [] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(17, 17, 17, 0.65)' }}>
-        Primary Cause of Decline
+        Warning Signs Found
       </span>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {tagList.map((tag) => {

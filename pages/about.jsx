@@ -6,28 +6,32 @@ export default function About() {
 
   const faqs = [
     {
-      q: 'Why is there absolutely no in-app messaging or chat?',
-      a: 'Chat introduces social pressure, off-platform deal-making, harassment, and subjective disputes. By eliminating communication channels entirely, both parties work blind against system-enforced rules and deliverables.'
+      q: "Is it legal to revive someone else's project?",
+      a: 'For open graves, yes. We only list a public repository if its open-source license (MIT, Apache, BSD, GPL and similar) already gives everyone the right to fork and modify it. You work in your own fork, the original is never touched, and the license requires you to keep crediting the original author. Repos with no license, or a license that does not allow this, can only be listed by their owner as a donation.'
     },
     {
-      q: 'How does the points-based escrow work?',
-      a: 'When an Owner approves a Taker, the required credits (e.g. 100 credits) are locked from the Taker into escrow. If the Taker finishes the work and it is verified, their stake is refunded and they earn an additional 100 reward credits. If they ghost for 14 days, the stake automatically forfeits to the Owner.'
+      q: 'What counts as “dead”?',
+      a: 'The owner archived the repository, or nobody has pushed to it for at least 12 months. The listing check asks GitHub directly, so an active project like Linux is refused automatically.'
     },
     {
-      q: 'What prevents an Owner from refusing to verify to steal free work?',
-      a: 'The 7-day automated review timer. If an Owner receives submitted work and fails to verify or act within 7 days, the system automatically marks the project completed, refunds the Taker, grants the completion reward, and penalizes the Owner with a -10 reputation strike.'
+      q: 'How do you stop people taking credit for work they did not do?',
+      a: 'Git history is the proof. When you submit a revival, we check with GitHub that your repository is a real fork of the original and that it has new commits made after you claimed it. Commits made before the claim, or by copying the code into a fresh repo, do not count. The original author stays credited on the project page forever.'
     },
     {
-      q: 'What happens if someone racks up ghost strikes?',
-      a: 'Every time a user ghosts or violates protocol deadlines, they receive +1 ghost strike. Upon accumulating 3 ghost strikes, the account is automatically banned from creating new listings or claiming projects.'
+      q: 'Why does claiming an open grave cost nothing, but a donated project needs a stake?',
+      a: "Anyone could fork an open grave anyway, so a claim is only a public “I'm working on this” flag for 14 days. A donated project is different: a real owner is handing over their work and waiting for you, so the builder locks a credit stake that they lose if they disappear, and the owner gets 7 days to review before the work is approved automatically."
     },
     {
-      q: 'Why are all usernames replaced with Digger-#### aliases?',
-      a: 'To guarantee adversarial safety. Neither side ever knows who the other person is, removing bias, reputation exploitation, and identity theft risks entirely.'
+      q: 'What is in the autopsy report?',
+      a: "It is built from the repository's real GitHub history: commits per year or quarter over its whole life, the peak, when the main contributor stopped, open versus closed issues, stars and forks. From that it diagnoses the most likely cause of death (for example maintainer departure, solo-maintainer burnout, gradual fade-out or an abrupt stop) and suggests where a reviver should start."
     },
     {
-      q: 'Is real money involved in the MVP?',
-      a: 'No. The campus MVP uses an internal credit economy. This eliminates payment processor overhead, legal licensing, and escrow escrow liability while still providing authentic skin in the game.'
+      q: 'Why is there no chat, and why the Digger-#### aliases?',
+      a: "These apply to donated projects. Owner and builder never negotiate: the system's fixed rules handle the handover, stakes and deadlines, so there is nothing to argue about and no pressure. Aliases keep both sides anonymous. Your GitHub username is never shown to other users."
+    },
+    {
+      q: 'Is real money involved?',
+      a: 'No. Credits are an internal points system with no cash value. They exist so that ghosting a donated project has a cost.'
     }
   ];
 
@@ -36,14 +40,14 @@ export default function About() {
       {/* Title */}
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: '#FFFFFF', border: '1.8px solid var(--border)', borderRadius: '20px', fontSize: 12, fontWeight: 700, marginBottom: 14, boxShadow: '1.5px 1.5px 0px #141414' }}>
-          <Icon name="tombstone" size={13} /> The Digital Graveyard Protocol
+          <Icon name="tombstone" size={13} /> The On Digital Graveyard
         </div>
         <h1 className="font-display" style={{ fontSize: 36, fontWeight: 800, margin: '0 0 12px', letterSpacing: '-0.03em' }}>
-          The Trustless Graveyard Manifesto
+          The Digital Graveyard Manifesto
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.65, margin: '0 auto', maxWidth: 640 }}>
-          Every year, thousands of hackathon builds, side projects, and startup MVPs quietly die.
-          Not because the code was bad, but because two strangers could never safely trust each other to finish it.
+          Every year thousands of good open-source projects quietly die: the maintainer moves on and the code sits frozen.
+          Digital Graveyard finds them, explains why they died, and lets anyone legally bring them back, with git history as proof of who did the work.
         </p>
       </div>
 
@@ -59,7 +63,7 @@ export default function About() {
         }}
       >
         <h3 className="font-display" style={{ fontSize: 18, fontWeight: 800, margin: '0 0 16px', letterSpacing: '-0.02em' }}>
-          The Two Unsolved Fears We Remove
+          Two Ways a Project Enters the Graveyard
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
           <div
@@ -72,13 +76,13 @@ export default function About() {
             }}
           >
             <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 8, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>💀 1. The Owner&apos;s Fear</span>
+              <span>🔓 1. Open Graves</span>
             </div>
             <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
-              &ldquo;If I give a stranger my repository, will they disappear, submit junk, or steal my hard work?&rdquo;
+              A public repository that is archived or untouched for 12+ months and whose open-source license already allows forking. Anyone can list it; no owner permission is needed.
             </p>
             <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: '#141414' }}>
-              ✓ Solved by Taker Credit Staking & automatic forfeiture.
+              ✓ Free to claim. Fork it, commit, and the revival is verified automatically.
             </div>
           </div>
 
@@ -92,13 +96,13 @@ export default function About() {
             }}
           >
             <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 8, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>🛠️ 2. The Builder&apos;s Fear</span>
+              <span>🎁 2. Donated Projects</span>
             </div>
             <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: 0, lineHeight: 1.55 }}>
-              &ldquo;If I put in 20 hours of real work, will the owner ghost me and refuse to release my reward?&rdquo;
+              The owner lists their own unfinished project (we check that your GitHub account owns the repo) and can leave a handoff letter for whoever picks it up.
             </p>
             <div style={{ marginTop: 10, fontSize: 12, fontWeight: 700, color: '#1E6B3E' }}>
-              ✓ Solved by 7-Day Auto-Release & Owner reputation strikes.
+              ✓ Protected by credit stakes, a 7-day auto-release and reputation strikes.
             </div>
           </div>
         </div>
@@ -107,7 +111,7 @@ export default function About() {
       {/* Core Differentiators Table */}
       <div style={{ marginBottom: 40 }}>
         <h2 className="font-display" style={{ fontSize: 24, fontWeight: 800, marginBottom: 16, letterSpacing: '-0.02em' }}>
-          Architectural Differentiators
+          How It Differs
         </h2>
         <div
           className="card"
@@ -121,30 +125,30 @@ export default function About() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#F4EFE6', borderBottom: '2px solid var(--border)' }}>
-                <th style={{ padding: '14px 18px', width: '45%', color: 'var(--text-muted)', fontWeight: 800 }}>Traditional Marketplaces</th>
-                <th style={{ padding: '14px 18px', color: 'var(--text)', fontWeight: 800 }}>Digital Graveyard Protocol</th>
+                <th style={{ padding: '14px 18px', width: '45%', color: 'var(--text-muted)', fontWeight: 800 }}>A dead repo on GitHub today</th>
+                <th style={{ padding: '14px 18px', color: 'var(--text)', fontWeight: 800 }}>On Digital Graveyard</th>
               </tr>
             </thead>
             <tbody>
               <tr style={{ borderBottom: '1.5px dotted var(--border)' }}>
-                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Public profiles, resumes, ratings & social links</td>
-                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Pure alias (Digger-####) + deterministic ledger reputation</td>
+                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Nobody knows it exists or why it stopped</td>
+                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Searchable listing with an autopsy built from its real history</td>
               </tr>
               <tr style={{ borderBottom: '1.5px dotted var(--border)' }}>
-                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Subjective human customer support disputes</td>
-                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Fixed, automated deterministic penalty timers</td>
+                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Unclear if you are even allowed to continue it</td>
+                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Only listed when its license already allows forking</td>
               </tr>
               <tr style={{ borderBottom: '1.5px dotted var(--border)' }}>
-                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Credit card fees, chargebacks & banking custody</td>
-                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Closed-loop credit economy with blind escrow staking</td>
+                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Several people may fork it without knowing about each other</td>
+                <td style={{ padding: '14px 18px', fontWeight: 700 }}>A public claim shows who is working on it</td>
               </tr>
               <tr style={{ borderBottom: '1.5px dotted var(--border)' }}>
-                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Chat-based negotiation & interpersonal pressure</td>
-                <td style={{ padding: '14px 18px', fontWeight: 700 }}>Zero in-app chat — system state machine mediates all handoffs</td>
+                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>A revival is invisible unless you go looking</td>
+                <td style={{ padding: '14px 18px', fontWeight: 700 }}>The verified fork is linked on the project page</td>
               </tr>
               <tr>
-                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Trusting an unknown stranger</td>
-                <td style={{ padding: '14px 18px', fontWeight: 800, color: '#1E6B3E' }}>Trusting immutable code and automated state rules</td>
+                <td style={{ padding: '14px 18px', color: 'var(--text-muted)' }}>Credit for the work is easy to blur</td>
+                <td style={{ padding: '14px 18px', fontWeight: 800, color: '#1E6B3E' }}>Git commits prove who did what; the original author stays credited</td>
               </tr>
             </tbody>
           </table>

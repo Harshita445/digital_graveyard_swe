@@ -71,7 +71,7 @@ async function handleLeaderboard(req, res) {
         rank: index + 1,
         id: u.id,
         alias: u.alias,
-        handle: u.githubUsername ? `@${u.githubUsername}` : `@${u.alias.toLowerCase().replace('-', '_')}`,
+        handle: `@${u.alias.toLowerCase().replace('-', '_')}`,
         role: index === 0 ? 'Chief Project Archaeologist' : index === 1 ? 'Lead Code Reviver' : index === 2 ? 'Graveyard Curator' : 'Specimen Inspector',
         projectsRevived,
         artifactsPreserved,

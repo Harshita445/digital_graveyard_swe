@@ -107,9 +107,9 @@ export default function GraveyardMap({ projects = [] }) {
             {projects.map((project, idx) => {
               // Extract or calculate coordinates (effort 0-100, potential 0-100)
               const effort = project.quadrantCoordinates?.effort ?? ((idx * 27 + 20) % 80 + 10);
-              const potential = project.quadrantCoordinates?.potential ?? (project.revivalScore?.overallScore || project.completion || 65);
+              const potential = project.quadrantCoordinates?.potential ?? project.revivalScore?.overallScore ?? 50;
               const isSelected = selectedProject?.id === project.id;
-              const score = project.revivalScore?.overallScore || project.completion || 75;
+              const score = project.revivalScore?.overallScore ?? null;
 
               return (
                 <button
@@ -127,7 +127,7 @@ export default function GraveyardMap({ projects = [] }) {
                     cursor: 'pointer',
                     transition: 'transform 0.15s ease'
                   }}
-                  title={`${project.title} (Revival: ${score}%)`}
+                  title={`${project.title} (${score != null ? `Revival: ${score}%` : "Not analyzed"})`}
                 >
                   <div
                     className="sketch-headstone"
@@ -146,7 +146,7 @@ export default function GraveyardMap({ projects = [] }) {
                       border: '2px solid var(--color-ink)'
                     }}
                   >
-                    {score}
+                    {score ?? "?"}
                   </div>
 
                   {/* Marker Tag */}
@@ -195,7 +195,7 @@ export default function GraveyardMap({ projects = [] }) {
                   {selectedProject.district || selectedProject.category || 'General Archive'}
                 </span>
                 <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.75)', fontWeight: 700 }}>
-                  Revival {selectedProject.revivalScore?.overallScore || selectedProject.completion || 75}%
+                  {selectedProject.revivalScore?.overallScore != null ? `Revival ${selectedProject.revivalScore.overallScore}%` : 'Not analyzed'}
                 </span>
               </div>
 
@@ -210,20 +210,20 @@ export default function GraveyardMap({ projects = [] }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1.5px solid rgba(17, 17, 17, 0.12)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'rgba(17, 17, 17, 0.65)' }}>Excavation Depth:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedProject.revivalScore?.effortEstimate || 'Moderate Excavation'}</span>
+                  <span style={{ fontWeight: 700 }}>{selectedProject.revivalScore?.effortEstimate || 'Unknown'}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'rgba(17, 17, 17, 0.65)' }}>Declared Inactive:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedProject.declaredInactiveDate || 'March 2025'}</span>
+                  <span style={{ color: 'rgba(17, 17, 17, 0.65)' }}>Last Active:</span>
+                  <span style={{ fontWeight: 700 }}>{selectedProject.lastActiveRecency || 'Unknown'}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'rgba(17, 17, 17, 0.65)' }}>License:</span>
-                  <span style={{ fontWeight: 700 }}>{selectedProject.license || 'MIT'}</span>
+                  <span style={{ fontWeight: 700 }}>{selectedProject.license || 'No license'}</span>
                 </div>
 
-                {selectedProject.stakeRequired && (
+                {selectedProject.stakeRequired > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'rgba(17, 17, 17, 0.65)' }}>Escrow Stake:</span>
                     <span style={{ fontWeight: 700 }}>🪙 {selectedProject.stakeRequired} Credits</span>
