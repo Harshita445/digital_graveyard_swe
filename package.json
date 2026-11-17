@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "node scripts/vercel-db-setup.mjs && next build",
     "build:gh": "node scripts/build-gh.js",
     "start": "next start -p 3000",
     "lint": "next lint",
