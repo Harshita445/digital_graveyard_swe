@@ -1,6 +1,7 @@
 import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
 import { recordLedgerEntry } from '../../../lib/ledger';
+import { verifyRevivalFork } from '../../../lib/githubIntelligence';
 
 /**
  * Unified Commitments API Route Handler
@@ -67,6 +68,42 @@ async function handleSubmit(req, res, id) {
 
     if (commitment.status !== 'ACTIVE') {
       return res.status(400).json({ error: `Commitment is not active (current status: ${commitment.status})` });
+    }
+
+    // Open graves are verified by git itself: the deliverable must be a fork of the
+    // original with new commits made after the claim. No human reviewer needed.
+    if (commitment.project.source === 'OPEN_GRAVE') {
+      const check = await verifyRevivalFork(commitment.project.githubRepoUrl, deliverableUrl, commitment.committedAt);
+      if (!check.ok) return res.status(400).json({ error: check.reason });
+
+      const evidence = `Verified fork ${check.forkUrl}: ${check.newCommits} new commit(s) since claim` +
+        (check.authors.length ? ` by ${check.authors.join(', ')}` : '') + `, ${check.aheadBy} ahead of the original.`;
+
+      await prisma.commitment.update({
+        where: { id: commitment.id },
+        data: {
+          status: 'COMPLETED',
+          submittedAt: new Date(),
+          resolvedAt: new Date(),
+          submissionNotes: [notes, evidence].filter(Boolean).join('\n\n'),
+          submissionUrl: check.forkUrl
+        }
+      });
+      await recordLedgerEntry({
+        userId: takerId,
+        type: 'REWARD_CREDIT',
+        amount: 100,
+        repDelta: 15,
+        relatedProjectId: commitment.projectId,
+        relatedCommitmentId: commitment.id,
+        notes: `Revived ${commitment.project.title}. ${evidence}`
+      });
+      await prisma.project.update({
+        where: { id: commitment.projectId },
+        data: { status: 'COMPLETED', revivedRepoUrl: check.forkUrl, reviewTimeoutAt: null }
+      });
+
+      return res.status(200).json({ message: `Revival verified! ${evidence}`, verification: check });
     }
 
     const reviewTimeoutAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days review window

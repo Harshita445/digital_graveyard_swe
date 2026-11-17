@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import ProjectCard from '../components/ProjectCard';
 import { useApp } from '../context/AppContext';
-import { getLocalProjects } from '../lib/mockFallback';
+import { getLocalProjects, CATEGORIES as BASE_CATEGORIES } from '../lib/mockFallback';
 import {
   Compass,
   LayoutGrid,
@@ -15,13 +15,18 @@ import {
   X
 } from 'lucide-react';
 
-const CATEGORIES = ['Any', 'Web', 'Mobile', 'AI/ML', 'IoT', 'DevTools', 'Education', 'Web3', 'Security'];
+const CATEGORIES = ['Any', ...BASE_CATEGORIES];
 const STATUSES = [
   { value: 'Any', label: 'All Artifacts' },
-  { value: 'LISTED', label: 'Available to Claim' },
-  { value: 'ACTIVE', label: 'Active in Escrow' },
-  { value: 'SUBMITTED', label: 'Work Submitted' },
-  { value: 'COMPLETED', label: 'Revival Complete' }
+  { value: 'LISTED', label: 'Dead · Available to Claim' },
+  { value: 'ACTIVE', label: 'Being Revived' },
+  { value: 'SUBMITTED', label: 'Awaiting Owner Review' },
+  { value: 'COMPLETED', label: 'Revived' }
+];
+const SOURCES = [
+  { value: 'Any', label: 'All Graves' },
+  { value: 'OPEN_GRAVE', label: 'Open Graves (open license)' },
+  { value: 'DONATED', label: 'Donated by Owners' }
 ];
 
 export default function Browse() {
@@ -32,6 +37,7 @@ export default function Browse() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('Any');
   const [status, setStatus] = useState('Any');
+  const [source, setSource] = useState('Any');
   const [maxStake, setMaxStake] = useState('Any');
   const [sort, setSort] = useState('recent');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
@@ -54,6 +60,7 @@ export default function Browse() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
+        setLoading(false);
         return;
       }
     } catch (err) {
@@ -95,6 +102,10 @@ export default function Browse() {
       list = list.filter((p) => p.status === status);
     }
 
+    if (source !== 'Any') {
+      list = list.filter((p) => (p.source || 'DONATED') === source);
+    }
+
     if (maxStake !== 'Any') {
       const limit = Number(maxStake);
       list = list.filter((p) => (p.stakeRequired || 0) <= limit);
@@ -108,7 +119,7 @@ export default function Browse() {
         list.sort((a, b) => (b.stakeRequired || 0) - (a.stakeRequired || 0));
         break;
       case 'completion':
-        list.sort((a, b) => (b.completion || b.revivalScore?.overallScore || 0) - (a.completion || a.revivalScore?.overallScore || 0));
+        list.sort((a, b) => (b.revivalScore?.overallScore ?? -1) - (a.revivalScore?.overallScore ?? -1));
         break;
       case 'recent':
       default:
@@ -117,7 +128,7 @@ export default function Browse() {
     }
 
     return list;
-  }, [projects, search, category, status, maxStake, sort, campusMode]);
+  }, [projects, search, category, status, source, maxStake, sort, campusMode]);
 
   const FilterSidebar = (
     <div
@@ -188,10 +199,25 @@ export default function Browse() {
         </div>
       </div>
 
+      {/* Source Filter */}
+      <div style={{ paddingTop: 10, borderTop: '1px solid rgba(17, 17, 17, 0.1)' }}>
+        <label style={{ display: 'block', fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
+          Grave Type
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {SOURCES.map((s) => (
+            <label key={s.value} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: source === s.value ? 700 : 500, cursor: 'pointer', padding: '2px 0' }}>
+              <input type="radio" name="source" checked={source === s.value} onChange={() => setSource(s.value)} style={{ accentColor: 'var(--color-ink)' }} />
+              <span>{s.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
       {/* Status Filter */}
       <div style={{ paddingTop: 10, borderTop: '1px solid rgba(17, 17, 17, 0.1)' }}>
         <label style={{ display: 'block', fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 8 }}>
-          Escrow Status
+          Revival Status
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {STATUSES.map((s) => {
@@ -414,11 +440,15 @@ export default function Browse() {
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <span style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.7)' }}>
-                Showing {filteredProjects.length} preserved artifact{filteredProjects.length === 1 ? '' : 's'}
+                {loading ? 'Digging up the catalog…' : `Showing ${filteredProjects.length} grave${filteredProjects.length === 1 ? '' : 's'}`}
               </span>
             </div>
 
-            {filteredProjects.length === 0 ? (
+            {loading ? (
+              <div className="sketch-card-static" style={{ padding: 48, textAlign: 'center', color: 'rgba(17, 17, 17, 0.6)' }}>
+                Loading the graveyard…
+              </div>
+            ) : filteredProjects.length === 0 ? (
               <div
                 className="sketch-card-static"
                 style={{

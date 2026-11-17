@@ -43,16 +43,22 @@ export default function ProjectCard({ project, index = 0 }) {
     }
   };
 
-  const revivalScore =
-    project.revivalScore?.overallScore ||
-    project.completion ||
-    Math.min(95, Math.max(30, 100 - (project.stakeRequired || 50) / 2));
+  // Only real, computed scores are shown; unanalyzed projects say so.
+  const revivalScore = project.revivalScore?.overallScore ?? null;
 
-  const district = project.district || (project.category === 'AI/ML' ? 'AI Catacombs' : project.category === 'IoT' ? 'Infrastructure Crypt' : 'The Forgotten Web');
-  const license = project.license || 'MIT';
-  const lastActiveText = project.lastActiveRecency || (project.updatedAt
-    ? `Last active ${Math.max(1, Math.floor((Date.now() - new Date(project.updatedAt).getTime()) / (1000 * 60 * 60 * 24 * 30)))} mo ago`
-    : '8 mo ago');
+  const district = project.district || project.category;
+  const license = project.license || 'No license';
+  const lastActiveText = project.lastActiveRecency ? `Last commit ${project.lastActiveRecency}` : 'Activity unknown';
+
+  const isOpenGrave = project.source === 'OPEN_GRAVE';
+  const statusBadge = {
+    LISTED: { label: '🪦 Dead', bg: 'var(--color-paper-dark)' },
+    PENDING_APPROVAL: { label: '⏳ Claim pending', bg: '#FFF4D6' },
+    ACTIVE: { label: '🌱 Being revived', bg: '#E3F4E1' },
+    SUBMITTED: { label: '🔎 In review', bg: '#FFF4D6' },
+    COMPLETED: { label: '✨ Revived', bg: '#D9F2D4' },
+    GHOSTED_RELISTED: { label: '🪦 Dead again', bg: 'var(--color-paper-dark)' }
+  }[project.status] || { label: project.status, bg: 'var(--color-paper-dark)' };
 
   const hasTornCorner = project.hasTornCorner ?? (index % 2 === 0);
 
@@ -146,7 +152,7 @@ export default function ProjectCard({ project, index = 0 }) {
               gap: 3,
               flexShrink: 0
             }}
-            title="Fork-friendly permissive open-source license"
+            title={project.isForkFriendly ? 'Open-source license: anyone may fork it' : 'No open license: only the owner can grant reuse'}
           >
             <GitFork style={{ width: 10, height: 10 }} />
             <span>{license}</span>
@@ -186,7 +192,14 @@ export default function ProjectCard({ project, index = 0 }) {
               {tech}
             </span>
           ))}
-          {project.stakeRequired && (
+          <span className="sketch-tag" style={{ padding: '2px 7px', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, backgroundColor: statusBadge.bg }}>
+            {statusBadge.label}
+          </span>
+          <span className="sketch-tag" style={{ padding: '2px 7px', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+            title={isOpenGrave ? 'Abandoned public repo; its license already allows anyone to fork it' : 'Listed by its verified owner'}>
+            {isOpenGrave ? '🔓 Open grave' : '🤝 Donated'}
+          </span>
+          {project.stakeRequired > 0 && (
             <span
               className="sketch-tag"
               style={{
@@ -222,7 +235,7 @@ export default function ProjectCard({ project, index = 0 }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: 'var(--color-ink)' }}>
           <Activity style={{ width: 13, height: 13 }} />
-          <span>Revival {revivalScore}%</span>
+          <span>{revivalScore === null ? 'Not analyzed' : `Revival score ${revivalScore}`}</span>
         </div>
       </div>
     </div>

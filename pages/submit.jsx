@@ -4,9 +4,7 @@ import { useRouter } from 'next/router';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/Icons';
 import { GitBranch, Code2 } from 'lucide-react';
-import { getLocalProjects, saveLocalProjects } from '../lib/mockFallback';
-
-const CATEGORIES = ['Web', 'Mobile', 'AI/ML', 'IoT', 'Game', 'Cybersecurity'];
+import { getLocalProjects, saveLocalProjects, CATEGORIES } from '../lib/mockFallback';
 
 export default function SubmitProject() {
   const router = useRouter();
@@ -21,6 +19,7 @@ export default function SubmitProject() {
   const [gitRepoUrl, setGitRepoUrl] = useState('');
   const [gitBranch, setGitBranch] = useState('main');
   const [milestoneMode, setMilestoneMode] = useState(false);
+  const [handoffNote, setHandoffNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -67,18 +66,25 @@ export default function SubmitProject() {
             fileName: packageLabel,
             fileUrl: cleanGitUrl,
             milestoneMode,
-            githubRepoUrl: cleanGitUrl
+            githubRepoUrl: cleanGitUrl,
+            handoffNote: handoffNote.trim()
           })
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          addToast('Project listed in the Graveyard successfully!', 'success');
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.project) {
+          addToast(data.message || 'Project listed in the Graveyard successfully!', 'success');
           router.push(`/project/${data.project.id}`);
           return;
         }
+        if (data?.error) {
+          // The server answered: show its reason (e.g. you don't own this repo) instead of faking success.
+          addToast(data.error, 'error');
+          if (data.projectId) router.push(`/project/${data.projectId}`);
+          return;
+        }
       } catch (err) {
-        // Handled in demo fallback below
+        // Network failure only: handled in static demo fallback below
       }
 
       // Demo fallback for GitHub Pages static export
@@ -145,11 +151,19 @@ export default function SubmitProject() {
           <Icon name="tombstone" size={13} /> Project Intake Registry
         </div>
         <h1 className="font-display" style={{ fontSize: 32, fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.03em' }}>
-          Upload Abandoned Codebase
+          Bury a Project So Someone Can Revive It
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 14.5, margin: 0, lineHeight: 1.5 }}>
-          List an unfinished project anonymously. Define the stake requirement to ensure only serious builders claim and finish your work.
+          Paste a GitHub repository. We check that you&apos;re allowed to list it, then build its autopsy from the real commit history.
         </p>
+        <div style={{ marginTop: 14, padding: 14, border: '2px dashed var(--border)', borderRadius: 12, fontSize: 13, lineHeight: 1.55, background: '#FFFFFF' }}>
+          <strong>What can you list?</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            <li><strong>Your own repo</strong> (your connected GitHub account owns it) → listed as a <em>donated</em> project.</li>
+            <li><strong>Anyone&apos;s abandoned repo</strong> with an open-source license (MIT, Apache, GPL…), archived or untouched for 12+ months → listed as an <em>open grave</em>. The license already allows forking, with credit to the original author.</li>
+            <li>Anything else is refused: no license means &quot;all rights reserved&quot;, so only its owner can list it.</li>
+          </ul>
+        </div>
       </div>
 
       <form
@@ -254,15 +268,12 @@ export default function SubmitProject() {
               <GitBranch size={18} />
               <label className="label" style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Git Repository URL *</label>
             </div>
-            <span style={{ fontSize: 11.5, background: 'var(--ink)', color: '#FFFFFF', padding: '3px 8px', borderRadius: 12, fontWeight: 600 }}>
-              Replaces ZIP upload
-            </span>
           </div>
 
           <input
             className="input"
             style={{ height: 44, borderRadius: '10px' }}
-            placeholder="https://github.com/owner/repository (or .git clone URL)"
+            placeholder="https://github.com/owner/repository"
             value={gitRepoUrl}
             onChange={e => setGitRepoUrl(e.target.value)}
             required
@@ -301,9 +312,22 @@ export default function SubmitProject() {
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
             <Code2 size={15} style={{ flexShrink: 0, marginTop: 2 }} />
             <span>
-              Public or private Git repository link. Approved Diggers receive access coordinates to this Git repository upon locking skin-in-the-game collateral in escrow. Live GitHub GraphQL metadata and forensic autopsy diagnostics are generated from this link.
+              Must be a public GitHub repository. The stake only applies to donated projects; open graves are free to claim.
             </span>
           </div>
+        </div>
+
+        {/* Handoff letter */}
+        <div>
+          <label className="label">Handoff Letter (if it&apos;s your project)</label>
+          <textarea
+            className="input"
+            rows={4}
+            style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
+            placeholder="Why did you stop? What works, what's half-done, what would you do next? This is the context a reviver can't get from the code."
+            value={handoffNote}
+            onChange={e => setHandoffNote(e.target.value)}
+          />
         </div>
 
         {/* Milestone Mode Toggle */}

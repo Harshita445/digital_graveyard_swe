@@ -3,20 +3,15 @@ import { Activity, AlertTriangle, Lightbulb } from 'lucide-react';
 
 export default function AutopsyChart({ report }) {
   if (!report) {
-    report = {
-      declinePattern: 'Gradual Decline',
-      peakPeriod: 'Q2 2024 (380 Commits)',
-      ownerStatedReason: 'Core student maintainers graduated and relocated. Handing stewardship over to the community.',
-      dataCorrelationNote: 'Commit velocity dropped sharply after semester finals. Zero unresolved architectural bugs.',
-      recommendedRevivalPath: 'Update dependencies to React 18 / Next.js 14 and redeploy free-tier serverless demo.',
-      activityTimeline: [
-        { period: 'Q1 2024', commits: 180, contributors: 4 },
-        { period: 'Q2 2024', commits: 380, contributors: 7, isPeak: true },
-        { period: 'Q3 2024', commits: 110, contributors: 3 },
-        { period: 'Q4 2024', commits: 30, contributors: 1 },
-        { period: 'Q1 2025', commits: 0, contributors: 0 }
-      ]
-    };
+    return (
+      <div className="sketch-card-static" style={{ padding: 24 }}>
+        <h3 style={{ fontFamily: 'var(--font-hand)', fontSize: 26, fontWeight: 700, margin: '0 0 8px' }}>AUTOPSY PENDING</h3>
+        <p style={{ margin: 0, color: 'rgba(17, 17, 17, 0.75)', lineHeight: 1.5 }}>
+          This project has not been analyzed yet. Autopsies are generated from the repository&apos;s real GitHub history
+          (commits over time, contributor drop-off, issues), so a project without a linked GitHub repo has no autopsy.
+        </p>
+      </div>
+    );
   }
 
   const timeline = report.activityTimeline || [];
@@ -192,12 +187,33 @@ export function CauseOfDeclineTags({ tags = [] }) {
         return { label: 'Technical Debt', icon: '⚙️' };
       case 'market-shift':
         return { label: 'Market Dynamics', icon: '📉' };
+      case 'archived-by-owner':
+        return { label: 'Archived by Owner', icon: '🔒' };
+      case 'single-maintainer':
+        return { label: 'Single Maintainer', icon: '🧍' };
+      case 'maintainer-left':
+        return { label: 'Main Maintainer Left', icon: '🚪' };
+      case 'issue-backlog':
+        return { label: 'Unanswered Issue Backlog', icon: '📥' };
+      case 'documentation-debt':
+        return { label: 'Documentation Debt', icon: '📄' };
+      case 'low-adoption':
+        return { label: 'Low Adoption', icon: '🌫️' };
+      case 'stale-dependencies':
+        return { label: 'Stale Dependencies', icon: '🧱' };
       default:
         return { label: tag, icon: '📌' };
     }
   };
 
-  const tagList = tags.length > 0 ? tags : ['graduation', 'time-constraints'];
+  const tagList = tags || [];
+  if (tagList.length === 0) {
+    return (
+      <div style={{ fontSize: 13, color: 'rgba(17, 17, 17, 0.65)' }}>
+        Cause of decline will appear once the repository has been analyzed.
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

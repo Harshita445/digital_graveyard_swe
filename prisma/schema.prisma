@@ -79,6 +79,17 @@ model Project {
   peakActivityContributors  Int?
   peakActivityPullRequests  Int?
   githubAnalyzedAt          DateTime?
+  githubArchived            Boolean?
+  githubActivity            String?   // JSON: [{ period, commits, contributors }] across the repo's whole life
+  githubTopMaintainer       String?   // login of the biggest contributor
+  githubMaintainerLastSeen  DateTime? // last week that contributor committed
+
+  // Where the listing came from:
+  //  DONATED    – listed by its verified owner (GitHub login matches repo owner)
+  //  OPEN_GRAVE – abandoned public repo whose open-source license already allows forking
+  source        String        @default("DONATED")
+  handoffNote   String?       // owner's "last letter": why it stopped, what is left
+  revivedRepoUrl String?      // fork that brought it back, once verified
 
   // Relations
   commitments   Commitment[]

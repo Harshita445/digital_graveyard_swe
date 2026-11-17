@@ -160,6 +160,27 @@ async function handleCommit(req, res, id) {
       return res.status(409).json({ error: 'This project already has an active commitment' });
     }
 
+    // Open graves have no owner to approve a claim: the open-source license already
+    // allows forking, so the claim starts immediately and costs no stake.
+    if (project.source === 'OPEN_GRAVE') {
+      const openCommitment = await prisma.commitment.create({
+        data: {
+          projectId: project.id,
+          takerId,
+          status: 'ACTIVE',
+          stakeLocked: 0,
+          committedAt: new Date(),
+          approvedAt: new Date(),
+          ghostDeadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        }
+      });
+      await prisma.project.update({ where: { id: project.id }, data: { status: 'ACTIVE' } });
+      return res.status(201).json({
+        commitment: openCommitment,
+        message: 'Claimed! Fork the repository on GitHub, push your work, then submit your fork URL to be verified.'
+      });
+    }
+
     if (taker.credits < project.stakeRequired) {
       return res.status(400).json({
         error: `Insufficient credits for stake. Required: ${project.stakeRequired}, Available: ${taker.credits}`
@@ -409,7 +430,7 @@ async function handleDownload(req, res, id) {
         `--- REPO INSTRUCTIONS ---\n` +
         `1. Review remaining incomplete components.\n` +
         `2. Write implementation and tests.\n` +
-        `3. Submit completed deliverable back to Project Graveyard before the 14-day timeout.\n`;
+        `3. Submit completed deliverable back to Digital Graveyard before the 14-day timeout.\n`;
 
       fileBuffer = Buffer.from(fileHeader);
     }

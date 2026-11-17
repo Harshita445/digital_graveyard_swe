@@ -35,8 +35,8 @@ export default function ProjectDetails({ projectId }) {
   }, [id, currentUser]);
 
   const fetchProjectDetail = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const res = await fetch(`/api/projects/${id}`, {
         headers: currentUser ? { 'x-user-id': currentUser.id } : {}
       });
@@ -45,6 +45,7 @@ export default function ProjectDetails({ projectId }) {
         setProject(data.project);
         setActiveCommitment(data.activeCommitment);
         setUserRole(data.userRole);
+        setLoading(false);
         return;
       }
     } catch (err) {
@@ -86,14 +87,21 @@ export default function ProjectDetails({ projectId }) {
         method: 'POST',
         headers: { 'x-user-id': currentUser.id }
       });
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        addToast('Claim submitted! Awaiting owner approval to lock escrow.', 'success');
+        addToast(data?.message || 'Claim submitted! Awaiting owner approval to lock escrow.', 'success');
         await fetchProjectDetail();
         await refreshUser();
+        setActionLoading(false);
+        return;
+      }
+      if (data?.error) {
+        addToast(data.error, 'error');
+        setActionLoading(false);
         return;
       }
     } catch (err) {
-      // Handled in demo fallback below
+      // Network failure only: handled in static demo fallback below
     }
 
     // Fallback for static demo mode
@@ -277,15 +285,23 @@ export default function ProjectDetails({ projectId }) {
           deliverableUrl: submissionUrl
         })
       });
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        const data = await res.json();
-        addToast(data.message, 'success');
+        addToast(data?.message || 'Submitted.', 'success');
         setSubmitModalOpen(false);
         await fetchProjectDetail();
+        await refreshUser();
+        setActionLoading(false);
+        return;
+      }
+      if (data?.error) {
+        // e.g. "That repository is not a fork of ..." — show the real reason.
+        addToast(data.error, 'error');
+        setActionLoading(false);
         return;
       }
     } catch (err) {
-      // Handled in fallback
+      // Network failure only: handled in static demo fallback below
     }
 
     const allProjects = getLocalProjects();
@@ -443,6 +459,7 @@ export default function ProjectDetails({ projectId }) {
   const isSubmitted = activeCommitment?.status === 'SUBMITTED';
   const isCompleted = project.status === 'COMPLETED';
   const github = project.githubIntelligence;
+  const isOpenGrave = project.source === 'OPEN_GRAVE';
 
   return (
     <div className="container" style={{ padding: '36px 0 70px' }}>
@@ -479,9 +496,17 @@ export default function ProjectDetails({ projectId }) {
               <span className="chip" style={{ fontSize: 12 }}>
                 <Icon name="tombstone" size={13} /> {project.category}
               </span>
-              <span className="chip chip-accent" style={{ fontSize: 12 }}>
-                🔒 {project.stakeRequired} credits stake
+              <span className="chip" style={{ fontSize: 12 }}>
+                {isOpenGrave ? '🔓 Open grave' : '🤝 Donated by owner'}
               </span>
+              {project.license && (
+                <span className="chip" style={{ fontSize: 12 }}>📜 {project.license}</span>
+              )}
+              {project.stakeRequired > 0 && (
+                <span className="chip chip-accent" style={{ fontSize: 12 }}>
+                  🔒 {project.stakeRequired} credits stake
+                </span>
+              )}
               {project.milestoneMode && (
                 <span className="chip chip-teal" style={{ fontSize: 12 }}>
                   ✓ Milestone Mode
@@ -494,10 +519,28 @@ export default function ProjectDetails({ projectId }) {
             </h1>
 
             <div style={{ display: 'flex', gap: 14, fontSize: 13, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-              <span>Listed by <strong>{project.owner?.alias}</strong> ({project.owner?.reputation} rep)</span>
+              {isOpenGrave && project.githubRepoOwner && (
+                <>
+                  <span>Originally built by <strong>@{project.githubRepoOwner}</strong></span>
+                  <span>·</span>
+                </>
+              )}
+              <span>{isOpenGrave ? 'Discovered' : 'Listed'} by <strong>{project.owner?.alias}</strong></span>
               <span>·</span>
-              <span>Updated {new Date(project.updatedAt).toLocaleDateString()}</span>
+              <span>Last commit {project.lastActiveRecency}</span>
             </div>
+            {project.revivedRepoUrl && (
+              <div style={{ marginTop: 14, padding: '10px 14px', background: '#D9F2D4', border: '2px solid var(--border)', borderRadius: 10, fontSize: 13.5 }}>
+                ✨ <strong>Revived!</strong> The living version is at{' '}
+                <a href={project.revivedRepoUrl} target="_blank" rel="noreferrer">{project.revivedRepoUrl.replace('https://github.com/', '')}</a>
+              </div>
+            )}
+            {isOpenGrave && (
+              <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                This repository is abandoned and its <strong>{project.license}</strong> license already lets anyone fork and modify it,
+                as long as the original author is credited. No owner permission is needed, and the original stays untouched.
+              </p>
+            )}
             {project.githubRepoUrl && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
                 <a href={project.githubRepoUrl} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm">
@@ -557,7 +600,8 @@ export default function ProjectDetails({ projectId }) {
           {/* TAB 1: OVERVIEW & SPECS */}
           {activeTab === 'overview' && (
             <div>
-              {/* Completion Progress Gauge */}
+              {/* Completion Progress Gauge (owner's estimate; open graves have none) */}
+              {!isOpenGrave && (
               <div
                 className="surface2"
                 style={{
@@ -596,10 +640,22 @@ export default function ProjectDetails({ projectId }) {
                     Scope Completion Estimate
                   </div>
                   <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0', lineHeight: 1.45 }}>
-                    Estimated working state of original scope. The anonymous builder must complete all remaining deliverables to successfully release escrow.
+                    The owner&apos;s own estimate of how much of the original scope works.
                   </p>
                 </div>
               </div>
+              )}
+
+              {project.handoffNote && (
+                <div className="card" style={{ padding: 24, marginBottom: 24, background: '#FFFDF6' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-display)', margin: '0 0 10px' }}>
+                    ✉️ Handoff letter from the owner
+                  </h3>
+                  <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text-muted)', margin: 0, whiteSpace: 'pre-line', fontStyle: 'italic' }}>
+                    {project.handoffNote}
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               <div
@@ -631,7 +687,8 @@ export default function ProjectDetails({ projectId }) {
                       </div>
                     </div>
                     <p style={{ margin: '14px 0 0', color: 'var(--text-muted)', fontSize: 12.5, lineHeight: 1.5 }}>
-                      The score is generated from live GitHub repository metadata and refreshed automatically through our scheduled ingestion pipeline.
+                      How revivable it is, from real GitHub data: documentation (25%), recent development (25%), community size (20%),
+                      adoption via stars and forks (15%), and share of issues that got closed (15%). Analyzed {new Date(github.analyzedAt).toLocaleDateString()}.
                     </p>
                   </section>
 
@@ -695,11 +752,20 @@ export default function ProjectDetails({ projectId }) {
                   <Icon name="shield" size={17} />
                   <strong style={{ fontSize: 14.5, fontFamily: 'var(--font-display)' }}>System Enforced Trust Guarantees</strong>
                 </div>
+                {isOpenGrave ? (
                 <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65 }}>
+                  <li><strong>Legal by license:</strong> the {project.license} license already permits forking and modifying this code with attribution.</li>
+                  <li><strong>Git is the proof:</strong> a revival only counts when your fork has new commits made after you claimed it. GitHub&apos;s history shows who wrote what.</li>
+                  <li><strong>No plagiarism of the original:</strong> the original author is credited on this page and in your fork&apos;s history.</li>
+                </ul>
+                ) : (
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65 }}>
+                  <li><strong>Verified owner:</strong> only the GitHub account that owns this repository could list it.</li>
                   <li><strong>Zero Exposure:</strong> Neither party ever sees the other&apos;s real email, name, or contact details.</li>
                   <li><strong>Ghost Protection:</strong> If the builder stops working for 14 days, their stake is automatically forfeited to the owner and the project relists.</li>
                   <li><strong>Review Protection:</strong> If the owner fails to verify submitted work within 7 days, the system automatically awards the reward to the builder.</li>
                 </ul>
+                )}
               </div>
             </div>
           )}
@@ -919,23 +985,47 @@ export default function ProjectDetails({ projectId }) {
                 {/* B. Active work phase */}
                 {isActive && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                      Stake locked: <strong>{activeCommitment.stakeLocked} credits</strong>
-                    </div>
-
-                    <button className="btn btn-primary btn-block" onClick={handleDownload}>
-                      <Icon name="download" size={15} /> Download Source Code (.zip)
-                    </button>
+                    {isOpenGrave ? (
+                      <>
+                        <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                          <li>Fork the original on GitHub.</li>
+                          <li>Get it working again and push commits to your fork.</li>
+                          <li>Submit your fork&apos;s URL. We verify it automatically.</li>
+                        </ol>
+                        <a className="btn btn-primary btn-block" href={`${project.githubRepoUrl}/fork`} target="_blank" rel="noreferrer"
+                          style={{ textAlign: 'center', textDecoration: 'none' }}>
+                          Fork on GitHub ↗
+                        </a>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                          Stake locked: <strong>{activeCommitment.stakeLocked} credits</strong>
+                        </div>
+                        {project.githubRepoUrl ? (
+                          <a className="btn btn-primary btn-block" href={project.githubRepoUrl} target="_blank" rel="noreferrer"
+                            style={{ textAlign: 'center', textDecoration: 'none' }}>
+                            Open Repository ↗
+                          </a>
+                        ) : (
+                          <button className="btn btn-primary btn-block" onClick={handleDownload}>
+                            <Icon name="download" size={15} /> Download Source Code (.zip)
+                          </button>
+                        )}
+                      </>
+                    )}
 
                     <button
                       className="btn btn-teal btn-block"
                       onClick={() => setSubmitModalOpen(true)}
                     >
-                      <Icon name="upload" size={15} /> Submit Completed Work
+                      <Icon name="upload" size={15} /> {isOpenGrave ? 'Submit My Fork for Verification' : 'Submit Completed Work'}
                     </button>
 
                     <div style={{ fontSize: 11.5, color: 'var(--text-dim)', textAlign: 'center' }}>
-                      Work is blind and off-platform. Submit when finished to trigger the 7-day review window.
+                      {isOpenGrave
+                        ? `Claim expires ${new Date(activeCommitment.ghostDeadlineAt).toLocaleDateString()} if no work is submitted.`
+                        : 'Submit when finished to start the owner\'s 7-day review window.'}
                     </div>
                   </div>
                 )}
@@ -955,7 +1045,10 @@ export default function ProjectDetails({ projectId }) {
                 {/* D. Completed */}
                 {isCompleted && (
                   <div style={{ padding: '12px', background: 'rgba(95,179,163,.15)', borderRadius: 10, fontSize: 13, color: 'var(--accent-2)' }}>
-                    🎉 Completed! Your stake has been refunded and 100 reward credits credited to your ledger.
+                    🎉 You revived it! 100 reward credits and +15 reputation were added to your ledger.
+                    {activeCommitment?.submissionNotes && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'pre-line' }}>{activeCommitment.submissionNotes}</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -964,7 +1057,32 @@ export default function ProjectDetails({ projectId }) {
             {/* CASE 3: GUEST / UNCOMMITTED USER */}
             {!isOwner && !isTaker && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {project.status === 'LISTED' ? (
+                {project.status === 'LISTED' && isOpenGrave ? (
+                  <>
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                      Free to claim: no stake and no owner approval, because the license already allows forking.
+                      Claiming tells others you&apos;re working on it for the next 14 days.
+                    </div>
+                    <div className="surface2" style={{ padding: 14, borderRadius: 10, fontSize: 13 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span>Stake:</span><strong>None</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Reward when verified:</span><strong style={{ color: 'var(--accent-2)' }}>+100 cr (+15 rep)</strong>
+                      </div>
+                    </div>
+                    {currentUser ? (
+                      <button className="btn btn-primary btn-block" onClick={handleCommit} disabled={actionLoading}>
+                        {actionLoading ? 'Claiming...' : '🌱 Claim & Start Reviving'}
+                      </button>
+                    ) : (
+                      <Link href={`/login?redirect=/project/${project.id}`} className="btn btn-primary btn-block"
+                        style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        Sign In to Claim →
+                      </Link>
+                    )}
+                  </>
+                ) : project.status === 'LISTED' ? (
                   <>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
                       Claim this abandoned project to finish it off-platform. Upon owner approval, your stake will be held in escrow until verification.
@@ -1013,9 +1131,13 @@ export default function ProjectDetails({ projectId }) {
                       </div>
                     ) : null}
                   </>
+                ) : isCompleted ? (
+                  <div style={{ padding: '14px', background: '#D9F2D4', borderRadius: 10, fontSize: 13, textAlign: 'center' }}>
+                    ✨ Already revived{project.revivedRepoUrl ? ' — see the living version linked above.' : '.'}
+                  </div>
                 ) : (
                   <div style={{ padding: '14px', background: 'var(--surface-2)', borderRadius: 10, fontSize: 13, color: 'var(--text-dim)', textAlign: 'center' }}>
-                    This project is currently claimed or in progress by an anonymous taker.
+                    🌱 Someone is reviving this right now.
                   </div>
                 )}
               </div>
@@ -1030,7 +1152,7 @@ export default function ProjectDetails({ projectId }) {
           <div className="modal-sketch" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <h3 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>
-                Submit Completed Deliverable
+                {isOpenGrave ? 'Submit Your Revival' : 'Submit Completed Deliverable'}
               </h3>
               <button className="btn-icon btn-ghost" onClick={() => setSubmitModalOpen(false)}>
                 <Icon name="close" size={18} />
@@ -1038,7 +1160,9 @@ export default function ProjectDetails({ projectId }) {
             </div>
 
             <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.5 }}>
-              Provide summary notes of what you built, fixed, or tested. The owner will have 7 days to verify.
+              {isOpenGrave
+                ? 'Paste your fork. We check on GitHub that it is a fork of the original with new commits made after you claimed it. If so, the project is marked revived immediately.'
+                : 'Provide summary notes of what you built, fixed, or tested. The owner will have 7 days to verify.'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1054,10 +1178,10 @@ export default function ProjectDetails({ projectId }) {
               </div>
 
               <div>
-                <label className="label">Deliverable Archive URL / Path</label>
+                <label className="label">{isOpenGrave ? 'Your Fork on GitHub *' : 'Deliverable URL (GitHub fork, PR or archive)'}</label>
                 <input
                   className="input"
-                  placeholder="/downloads/completed_deliverable.zip"
+                  placeholder={isOpenGrave ? 'https://github.com/you/' + (project.githubRepoName || 'repo') : 'https://github.com/you/repo'}
                   value={submissionUrl}
                   onChange={e => setSubmissionUrl(e.target.value)}
                 />
@@ -1067,9 +1191,9 @@ export default function ProjectDetails({ projectId }) {
                 className="btn btn-primary btn-block"
                 style={{ marginTop: 10, padding: '12px' }}
                 onClick={handleSubmitDeliverable}
-                disabled={actionLoading || !submissionNotes.trim()}
+                disabled={actionLoading || !submissionNotes.trim() || (isOpenGrave && !submissionUrl.trim())}
               >
-                {actionLoading ? 'Submitting...' : 'Submit Deliverable & Begin 7-Day Review'}
+                {actionLoading ? 'Verifying...' : isOpenGrave ? 'Verify My Revival' : 'Submit Deliverable & Begin 7-Day Review'}
               </button>
             </div>
           </div>

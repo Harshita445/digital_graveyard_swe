@@ -154,8 +154,8 @@ export default function GraphQLExplorer() {
   return (
     <>
       <Head>
-        <title>GraphQL API Explorer — Project Graveyard</title>
-        <meta name="description" content="Interactive GraphQL protocol explorer for Project Graveyard datasets and mutations." />
+        <title>GraphQL API Explorer — Digital Graveyard</title>
+        <meta name="description" content="Interactive GraphQL protocol explorer for Digital Graveyard datasets and mutations." />
       </Head>
 
       <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24, padding: '20px 0 60px' }}>
@@ -180,7 +180,7 @@ export default function GraphQLExplorer() {
               <Code2 size={13} /> GraphQL Yoga Engine v5
             </div>
             <h1 className="font-display" style={{ margin: '0 0 6px', fontSize: 28, fontWeight: 800 }}>
-              Gravefin GraphQL Protocol Explorer
+              Digital Graveyard GraphQL Explorer
             </h1>
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}>
               Query dead code specimens, verify escrow transactions, inspect immutable ledgers, and trigger mutations.

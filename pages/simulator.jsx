@@ -56,7 +56,7 @@ export default function Simulator() {
           Protocol Simulator & Cron Console
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 14.5, margin: 0, lineHeight: 1.6 }}>
-          Project Graveyard relies on deterministic automated timers rather than human arbiters.
+          Digital Graveyard relies on deterministic automated timers rather than human arbiters.
           Use this console to simulate time passing, trigger the daily cron verification job, and observe automatic forfeitures, refunds, and bans in real-time.
         </p>
       </div>

@@ -14,7 +14,7 @@ export default function Footer() {
           </div>
           <div>
             <p style={{ fontFamily: 'var(--font-hand)', fontSize: 20, fontWeight: 700, margin: 0 }}>Digital Graveyard Archive</p>
-            <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.6)', margin: 0 }}>Preservation Library • Est. 2024</p>
+            <p style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.6)', margin: 0 }}>Revival Registry • Est. 2026</p>
           </div>
         </div>
 
