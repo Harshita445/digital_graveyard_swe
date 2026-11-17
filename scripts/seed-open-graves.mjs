@@ -18,6 +18,8 @@ import { analyzeGitHubRepository, githubRest, isOpenLicense } from '../lib/githu
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const PER_QUERY = Number(process.argv.find(arg => /^\d+$/.test(arg)) || 5);
+// --limit=N stops after N repos in total (spread across all categories by PER_QUERY).
+const LIMIT = Number((process.argv.find(arg => arg.startsWith('--limit=')) || '').split('=')[1]) || Infinity;
 
 if (!process.env.GITHUB_TOKEN) {
   console.error('GITHUB_TOKEN is required. Run:  GITHUB_TOKEN=$(gh auth token) node scripts/seed-open-graves.mjs');
@@ -90,6 +92,7 @@ async function main() {
     }
 
     for (const repo of repos) {
+      if (added + refreshed >= LIMIT || (DRY_RUN && seen.size >= LIMIT)) break;
       if (seen.has(repo.full_name)) continue;
       seen.add(repo.full_name);
       const url = `https://github.com/${repo.full_name}`;
