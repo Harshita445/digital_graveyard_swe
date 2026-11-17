@@ -1,0 +1,273 @@
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { useApp } from '../context/AppContext';
+import Icon from '../components/Icons';
+
+export default function Login({ initialMode = 'login' }) {
+  const router = useRouter();
+  const { login, signup, addToast } = useApp();
+  const [mode, setMode] = useState(initialMode);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  React.useEffect(() => {
+    if (router.query.mode === 'signup' || router.query.tab === 'signup') {
+      setMode('signup');
+    }
+  }, [router.query]);
+
+  React.useEffect(() => {
+    if (router.query.error) {
+      const err = router.query.error;
+      if (err === 'github_not_configured') {
+        setErrorMsg('GitHub OAuth credentials (GITHUB_CLIENT_ID & GITHUB_CLIENT_SECRET) are not configured in .env yet.');
+      } else if (err === 'state_mismatch') {
+        setErrorMsg('Security check failed: OAuth state mismatch. Please retry.');
+      } else if (err === 'access_denied') {
+        setErrorMsg('GitHub authorization was declined by user.');
+      } else if (err === 'account_banned') {
+        setErrorMsg('This account is suspended due to protocol violations.');
+      } else {
+        setErrorMsg(`GitHub OAuth error: ${err}`);
+      }
+    }
+  }, [router.query.error]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+
+    if (mode === 'signup') {
+      if (password !== confirmPassword) {
+        setErrorMsg('Passwords do not match');
+        addToast('Passwords do not match', 'error');
+        return;
+      }
+      if (password.length < 6) {
+        setErrorMsg('Password must be at least 6 characters');
+        addToast('Password must be at least 6 characters', 'error');
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+      if (mode === 'signup') {
+        await signup(email, password);
+      } else {
+        await login(email, password);
+      }
+      router.push('/dashboard');
+    } catch (err) {
+      setErrorMsg(err.message || (mode === 'signup' ? 'Registration failed' : 'Authentication failed'));
+      addToast(err.message || (mode === 'signup' ? 'Registration failed' : 'Authentication failed'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="container" style={{ padding: '50px 0 80px', maxWidth: 460 }}>
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ width: 48, height: 48, border: '2px solid var(--border)', borderRadius: '12px 12px 6px 6px', background: '#FFFFFF', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, boxShadow: '2px 2px 0px #141414' }}>
+          <Icon name="tombstone" size={22} />
+        </div>
+        <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', letterSpacing: '-0.03em' }}>
+          {mode === 'signup' ? 'Create Anonymous Account' : 'Authenticate to Graveyard'}
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: 0 }}>
+          {mode === 'signup'
+            ? 'You will automatically be issued a unique Digger alias and 500 starter escrow credits.'
+            : 'Your real email is private. You will interact solely under your assigned Digger alias.'}
+        </p>
+      </div>
+
+      {errorMsg && (
+        <div
+          style={{
+            padding: '12px 16px',
+            marginBottom: 16,
+            background: '#FFF0F0',
+            border: '1.8px solid #F87171',
+            borderRadius: '10px',
+            color: '#B91C1C',
+            fontSize: 13,
+            fontWeight: 700,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            boxShadow: '2px 2px 0px #141414'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="alertTriangle" size={16} />
+            <span>{errorMsg}</span>
+          </div>
+          {router.query.error === 'github_not_configured' && (
+            <div style={{ marginTop: 4, fontSize: 12 }}>
+              <Link
+                href="/api/auth/github?dev=true"
+                style={{ color: '#1D4ED8', textDecoration: 'underline', fontWeight: 800 }}
+              >
+                Click here to test GitHub OAuth in Dev Simulation Mode →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div
+        className="card"
+        style={{
+          padding: 26,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          background: '#FFFFFF',
+          borderRadius: '18px',
+          border: '2px solid var(--border)',
+          boxShadow: '3px 4px 0px #141414'
+        }}
+      >
+        {/* Mode Selector Tabs */}
+        <div style={{ display: 'flex', gap: 6, background: '#FAF8F4', padding: 4, borderRadius: 10, border: '1.5px solid var(--border)' }}>
+          <button
+            type="button"
+            onClick={() => setMode('login')}
+            className="btn-sketch-sm"
+            style={{
+              flex: 1,
+              padding: '7px 0',
+              textAlign: 'center',
+              background: mode === 'login' ? 'var(--accent)' : 'transparent',
+              color: mode === 'login' ? '#FFFFFF' : 'var(--text)',
+              border: mode === 'login' ? '1.5px solid var(--border)' : 'none',
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('signup')}
+            className="btn-sketch-sm"
+            style={{
+              flex: 1,
+              padding: '7px 0',
+              textAlign: 'center',
+              background: mode === 'signup' ? 'var(--accent)' : 'transparent',
+              color: mode === 'signup' ? '#FFFFFF' : 'var(--text)',
+              border: mode === 'signup' ? '1.5px solid var(--border)' : 'none',
+              fontWeight: 800,
+              cursor: 'pointer'
+            }}
+          >
+            Create Account (+500 cr)
+          </button>
+        </div>
+
+        {/* GitHub OAuth Button */}
+        <a
+          href="/api/auth/github"
+          className="btn btn-block"
+          style={{
+            height: 44,
+            fontSize: 14.5,
+            borderRadius: '10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            background: '#24292F',
+            color: '#FFFFFF',
+            border: '2px solid #141414',
+            boxShadow: '2px 2.5px 0px #141414',
+            textDecoration: 'none',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          <Icon name="github" size={20} />
+          <span>Continue with GitHub</span>
+        </a>
+
+        <div style={{ display: 'flex', alignItems: 'center', margin: '2px 0', gap: 12 }}>
+          <div style={{ flex: 1, height: 1.5, background: 'rgba(20, 20, 20, 0.15)' }} />
+          <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.08em' }}>
+            Or with Email
+          </span>
+          <div style={{ flex: 1, height: 1.5, background: 'rgba(20, 20, 20, 0.15)' }} />
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+        >
+          <div>
+            <label className="label">Account Email</label>
+            <input
+              type="email"
+              className="input"
+              style={{ height: 42, borderRadius: '10px' }}
+              placeholder="digger@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="label">Password</label>
+            <input
+              type="password"
+              className="input"
+              style={{ height: 42, borderRadius: '10px' }}
+              placeholder="••••••••"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          {mode === 'signup' && (
+            <div>
+              <label className="label">Confirm Password</label>
+              <input
+                type="password"
+                className="input"
+                style={{ height: 42, borderRadius: '10px' }}
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            style={{ marginTop: 4, height: 42, fontSize: 14.5, borderRadius: '10px' }}
+            disabled={loading}
+          >
+            {loading ? 'Processing...' : (mode === 'signup' ? 'Create Account & Claim 500 Credits →' : 'Log In with Email →')}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+          {mode === 'signup' ? (
+            <span>Already have an account? <button type="button" onClick={() => setMode('login')} style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Sign In</button></span>
+          ) : (
+            <span>Don&apos;t have an account? <button type="button" onClick={() => setMode('signup')} style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Create anonymous account</button></span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
