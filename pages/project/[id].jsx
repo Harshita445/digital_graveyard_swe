@@ -841,7 +841,7 @@ export default function ProjectDetails({ projectId }) {
             <div>
               {/* Stewardship Handover Protocol & Transformation */}
               <div style={{ marginBottom: 24 }}>
-                <HandoverChecklist project={project} />
+                <HandoverChecklist project={project} commitment={activeCommitment} />
               </div>
 
               {/* Milestones Section */}
