@@ -7,7 +7,6 @@ import { useApp } from '../context/AppContext';
 import { getLocalProjects, CATEGORIES as BASE_CATEGORIES } from '../lib/mockFallback';
 import {
   Compass,
-  LayoutGrid,
   Filter,
   Sparkles,
   Search,
@@ -310,39 +309,6 @@ export default function Browse() {
             </h1>
           </div>
 
-          {/* View Mode Toggle: Grid vs Map */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span
-              className="sketch-tag"
-              style={{
-                padding: '6px 14px',
-                fontSize: 13,
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 700,
-                backgroundColor: 'var(--color-ink)',
-                color: 'var(--color-paper)',
-                gap: 6
-              }}
-            >
-              <LayoutGrid style={{ width: 14, height: 14 }} />
-              <span>Catalog Grid</span>
-            </span>
-
-            <Link
-              href="/browse/map"
-              className="sketch-btn"
-              style={{
-                padding: '6px 14px',
-                fontSize: 13,
-                fontFamily: 'var(--font-mono)',
-                textDecoration: 'none',
-                gap: 6
-              }}
-            >
-              <Compass style={{ width: 14, height: 14 }} />
-              <span>Cartography Map</span>
-            </Link>
-          </div>
         </div>
 
         {/* Search Bar & Sort Row */}

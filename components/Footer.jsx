@@ -20,12 +20,8 @@ export default function Footer() {
 
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 20, fontFamily: 'var(--font-hand)', fontSize: 18 }}>
           <Link href="/browse" style={{ textDecoration: 'none', color: 'inherit' }}>Collections</Link>
-          <Link href="/browse/map" style={{ textDecoration: 'none', color: 'inherit' }}>Cartography Map</Link>
-          <Link href="/workbench" style={{ textDecoration: 'none', color: 'inherit' }}>Archivist Workbench</Link>
           <Link href="/submit" style={{ textDecoration: 'none', color: 'inherit' }}>Submit Artifact</Link>
           <Link href="/dashboard" style={{ textDecoration: 'none', color: 'inherit' }}>Dashboard & Ledger</Link>
-          <Link href="/simulator" style={{ textDecoration: 'none', color: 'inherit' }}>Sandbox</Link>
-          <Link href="/graphql" style={{ textDecoration: 'none', color: 'inherit' }}>GraphQL API</Link>
           <Link href="/about" style={{ textDecoration: 'none', color: 'inherit' }}>Manifesto</Link>
         </div>
       </div>

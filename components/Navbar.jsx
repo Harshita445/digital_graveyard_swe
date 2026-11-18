@@ -4,8 +4,6 @@ import { useRouter } from 'next/router';
 import { useApp } from '../context/AppContext';
 import {
   Compass,
-  MapPin,
-  BookOpen,
   PlusCircle,
   LayoutDashboard,
   Search,
@@ -15,11 +13,7 @@ import {
   ArrowRight,
   Shield,
   Coins,
-  Terminal,
   Info,
-  Code2,
-  ChevronDown,
-  Layers,
   Menu
 } from 'lucide-react';
 
@@ -27,19 +21,14 @@ export default function Navbar() {
   const router = useRouter();
   const { currentUser, logout, campusMode, setCampusMode } = useApp();
   const [personaOpen, setPersonaOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const toolsRef = useRef(null);
   const personaRef = useRef(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(e) {
-      if (toolsRef.current && !toolsRef.current.contains(e.target)) {
-        setToolsOpen(false);
-      }
       if (personaRef.current && !personaRef.current.contains(e.target)) {
         setPersonaOpen(false);
       }
@@ -65,22 +54,10 @@ export default function Navbar() {
     { href: '/about', label: 'Manifesto', icon: Info },
   ];
 
-  // Secondary tools consolidated into dropdown
-  const toolLinks = [
-    { href: '/browse/map', label: 'Cartography Map', icon: MapPin, desc: '2D Cartesian quadrant map' },
-    { href: '/workbench', label: 'Archivist Workbench', icon: BookOpen, desc: 'Curatorial research center' },
-    { href: '/simulator', label: 'Protocol Sandbox', icon: Terminal, desc: 'Time-travel & cron simulator' },
-    { href: '/graphql', label: 'GraphQL Explorer', icon: Code2, desc: 'Interactive protocol queries' },
-  ];
-
   const isActive = (href) => {
-    if (href === '/browse') {
-      return router.pathname === '/browse' && !router.asPath.includes('/browse/map');
-    }
+    if (href === '/browse') return router.pathname === '/browse';
     return router.pathname === href || router.asPath.startsWith(href);
   };
-
-  const isToolsActive = toolLinks.some(t => router.pathname.startsWith(t.href));
 
   return (
     <header
@@ -232,84 +209,6 @@ export default function Navbar() {
             );
           })}
 
-          {/* Tools Dropdown Trigger */}
-          <div ref={toolsRef} style={{ position: 'relative' }}>
-            <button
-              onClick={() => setToolsOpen(!toolsOpen)}
-              style={{
-                background: isToolsActive ? 'rgba(0,0,0,0.06)' : 'transparent',
-                border: isToolsActive ? '1.5px solid var(--border)' : '1.5px solid transparent',
-                borderRadius: 8,
-                padding: '3px 8px',
-                fontFamily: 'var(--font-hand)',
-                fontSize: 21,
-                color: 'var(--color-ink)',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                fontWeight: isToolsActive ? 700 : 500
-              }}
-            >
-              <Layers style={{ width: 17, height: 17 }} />
-              <span>Tools</span>
-              <ChevronDown style={{ width: 14, height: 14, transform: toolsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-            </button>
-
-            {/* Tools Dropdown Menu */}
-            {toolsOpen && (
-              <div
-                className="sketch-card-static"
-                style={{
-                  position: 'absolute',
-                  top: 36,
-                  left: -30,
-                  width: 250,
-                  padding: '8px 6px',
-                  zIndex: 200,
-                  backgroundColor: 'var(--color-paper)',
-                  boxShadow: '4px 6px 0px #141414',
-                  borderRadius: 10,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4
-                }}
-              >
-                {toolLinks.map((tool) => {
-                  const IconComp = tool.icon;
-                  const active = router.pathname === tool.href;
-                  return (
-                    <Link
-                      key={tool.href}
-                      href={tool.href}
-                      onClick={() => setToolsOpen(false)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        padding: '8px 10px',
-                        textDecoration: 'none',
-                        color: 'var(--color-ink)',
-                        borderRadius: 6,
-                        backgroundColor: active ? 'rgba(0,0,0,0.06)' : 'transparent',
-                        transition: 'background 0.12s'
-                      }}
-                    >
-                      <IconComp style={{ width: 16, height: 16, color: 'var(--color-ink)', flexShrink: 0 }} />
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-sans)', lineHeight: 1.2 }}>
-                          {tool.label}
-                        </span>
-                        <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-                          {tool.desc}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </nav>
 
         {/* Right Controls: Search & Persona Switcher */}
@@ -575,34 +474,6 @@ export default function Navbar() {
             );
           })}
 
-          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0', opacity: 0.3 }} />
-          <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', color: 'var(--text-dim)', paddingLeft: 4 }}>
-            Archaeologist Tools
-          </div>
-
-          {toolLinks.map((tool) => {
-            const ToolIcon = tool.icon;
-            const active = router.pathname === tool.href;
-            return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                onClick={() => setMobileNavOpen(false)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  textDecoration: 'none',
-                  color: 'var(--color-ink)',
-                  fontWeight: active ? 700 : 500,
-                  fontSize: 18
-                }}
-              >
-                <ToolIcon style={{ width: 16, height: 16 }} />
-                <span>{tool.label}</span>
-              </Link>
-            );
-          })}
         </nav>
       )}
     </header>

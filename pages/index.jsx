@@ -6,7 +6,6 @@ import { getLocalProjects } from '../lib/mockFallback';
 import {
   Sparkles,
   ArrowRight,
-  Compass,
   BookOpen,
   ShieldCheck,
   GitFork
@@ -133,7 +132,7 @@ export default function Home() {
               </Link>
 
               <Link
-                href="/browse/map"
+                href="/submit"
                 className="sketch-btn"
                 style={{
                   padding: '12px 24px',
@@ -144,8 +143,7 @@ export default function Home() {
                   textDecoration: 'none'
                 }}
               >
-                <Compass style={{ width: 20, height: 20, color: 'var(--color-ink)' }} />
-                <span>Graveyard Map</span>
+                <span>List a Dead Project</span>
               </Link>
             </div>
           </div>
