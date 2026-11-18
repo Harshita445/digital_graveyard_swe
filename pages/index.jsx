@@ -39,7 +39,7 @@ export default function Home() {
         <title>Digital Graveyard — Preserve. Understand. Revive.</title>
         <meta
           name="description"
-          content="A non-morbid preservation archive for abandoned software projects, postmortem autopsies, and open stewardship transfers."
+          content="Find abandoned open-source projects you're allowed to revive, see why each one died, and bring it back."
         />
       </Head>
 
@@ -70,7 +70,7 @@ export default function Home() {
                 }}
               >
                 <Sparkles style={{ width: 14, height: 14, color: 'var(--color-ink)' }} />
-                <span>OPEN ARCHIVAL PRESERVATION LIBRARY</span>
+                <span>OPEN-SOURCE REVIVAL</span>
               </span>
             </div>
 
@@ -110,7 +110,7 @@ export default function Home() {
                   fontFamily: 'var(--font-sans)'
                 }}
               >
-                Digital Graveyard is a digital archive of forgotten software ideas. We document historical autopsy reports, compute code health scores, and facilitate structured stewardship transfers.
+                Find abandoned open-source projects you’re allowed to revive. See why each one died, then fork it and bring it back, alone or with others.
               </p>
             </div>
 
@@ -197,76 +197,9 @@ export default function Home() {
                 <path d="M 20 200 Q 35 185 40 200 M 100 200 Q 115 190 120 200 M 240 200 Q 255 185 260 200" />
               </svg>
 
-              <p style={{ fontFamily: 'var(--font-hand)', fontSize: 22, fontWeight: 700, margin: '8px 0 2px', color: 'var(--color-ink)' }}>
-                Digital Preservation Vault
-              </p>
-              <p style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.65)', margin: 0 }}>
-                Preserving technical lineage & ownership provenance
-              </p>
             </div>
           </div>
         </section>
-
-        {/* Software Lifecycle Timeline Banner */}
-        <section
-          className="sketch-card-static"
-          style={{
-            padding: '24px 20px',
-            backgroundColor: 'rgba(244, 239, 230, 0.4)',
-            textAlign: 'center'
-          }}
-        >
-          <div style={{ marginBottom: 14 }}>
-            <h3 style={{ fontFamily: 'var(--font-hand)', fontSize: 26, fontWeight: 700, margin: 0, color: 'var(--color-ink)' }}>
-              The Software Lifecycle Timeline
-            </h3>
-            <p style={{ fontSize: 11.5, fontFamily: 'var(--font-mono)', color: 'rgba(17, 17, 17, 0.65)', margin: '4px 0 0' }}>
-              Every project passes through archival stages
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 10,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              fontWeight: 700
-            }}
-          >
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>1. Idea</span>
-            <span>→</span>
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>2. Prototype</span>
-            <span>→</span>
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>3. Launch</span>
-            <span>→</span>
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>4. Peak</span>
-            <span>→</span>
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>5. Decline</span>
-            <span>→</span>
-            <span className="sketch-tag" style={{ padding: '6px 14px', backgroundColor: 'var(--color-paper)' }}>6. Archive</span>
-            <span>→</span>
-            <span
-              className="sketch-tag"
-              style={{
-                padding: '6px 14px',
-                backgroundColor: 'var(--color-ink)',
-                color: 'var(--color-paper)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6
-              }}
-            >
-              🌱 7. Revival
-            </span>
-          </div>
-        </section>
-
-        {/* Hand-Drawn Organic Divider */}
-        <div className="sketch-divider" />
 
         {/* Featured Preserved Artifacts Grid */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

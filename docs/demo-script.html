@@ -1,0 +1,309 @@
+<title>Digital Graveyard Demo Script</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column like a stage script; each demo step is a row of "do" (what to click) and "say" (what to tell the class). */
+:root {
+  --paper: #fbfaf6;
+  --sheet: #ffffff;
+  --ink: #18181a;
+  --muted: #5d5d63;
+  --rule: #dedbd2;
+  --moss: #2f6b3f;
+  --moss-soft: #e6f0e7;
+  --warn: #8a4b0f;
+  --warn-soft: #fbefdf;
+  --font-display: 'Patrick Hand', 'Comic Neue', 'Segoe Print', cursive;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #151517; --sheet: #1d1d20; --ink: #ecebe6; --muted: #a3a29b; --rule: #34343a;
+    --moss: #8fcf9c; --moss-soft: #1f3324; --warn: #f0b878; --warn-soft: #3a2a17; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #151517; --sheet: #1d1d20; --ink: #ecebe6; --muted: #a3a29b; --rule: #34343a;
+  --moss: #8fcf9c; --moss-soft: #1f3324; --warn: #f0b878; --warn-soft: #3a2a17; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--font-body);
+  font-size: 15.5px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+main { max-width: 780px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+h1, h2 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: clamp(2.4rem, 6vw, 3.4rem); }
+h2 { font-size: 2rem; }
+h3 { font-size: 1.02rem; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+a { color: var(--moss); }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+header { display: flex; flex-direction: column; gap: 10px; }
+header .lede { color: var(--muted); max-width: 62ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 16px; }
+.intro { color: var(--muted); max-width: 64ch; }
+
+/* Pitch */
+.pitch { background: var(--sheet); border: 2px solid var(--ink); border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }
+.pitch p { max-width: 66ch; }
+.pitch .beat { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--moss); display: block; margin-bottom: 2px; }
+
+/* Checklist */
+ul.check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+ul.check li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+ul.check li::before { content: ""; width: 16px; height: 16px; border: 2px solid var(--ink); border-radius: 3px; margin-top: 4px; }
+.accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.account { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.account strong { font-family: var(--font-display); font-size: 1.4rem; font-weight: 400; }
+
+/* Steps */
+ol.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; counter-reset: step; }
+ol.steps > li { counter-increment: step; display: grid; grid-template-columns: 52px 1fr; gap: 14px; padding: 20px 0; border-top: 1px solid var(--rule); }
+ol.steps > li:last-child { border-bottom: 1px solid var(--rule); }
+ol.steps > li::before { content: counter(step); font-family: var(--font-display); font-size: 2.2rem; line-height: 1; color: var(--moss); }
+.step { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.step-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.time { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.do-say { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.do-say > div { min-width: 0; }
+.do-say .label { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 4px; }
+.say { border-left: 3px solid var(--moss); padding-left: 12px; font-style: italic; }
+.see { font-size: 0.9rem; color: var(--muted); }
+.side { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.window { background: var(--sheet); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; min-width: 0; }
+.window .who { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px; }
+
+.note { border-radius: 8px; padding: 12px 14px; font-size: 0.92rem; }
+.note.warn { background: var(--warn-soft); color: var(--ink); border: 1px solid var(--warn); }
+.note.good { background: var(--moss-soft); color: var(--ink); border: 1px solid var(--moss); }
+.note strong { color: inherit; }
+
+/* Q&A */
+dl.qa { margin: 0; display: flex; flex-direction: column; gap: 14px; }
+dl.qa dt { font-weight: 700; }
+dl.qa dd { margin: 2px 0 0; color: var(--muted); max-width: 66ch; }
+
+/* Results table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--sheet); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; min-width: 520px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+th { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.pass { color: var(--moss); font-weight: 700; white-space: nowrap; }
+.stack { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 20px; }
+.stack div { min-width: 0; }
+.stack b { display: block; font-size: 0.85rem; }
+.stack span { color: var(--muted); font-size: 0.9rem; }
+
+@media (max-width: 620px) {
+  .do-say, .side { grid-template-columns: 1fr; }
+  ol.steps > li { grid-template-columns: 34px 1fr; gap: 10px; }
+  ol.steps > li::before { font-size: 1.8rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Software Engineering · Class Demo</span>
+    <h1>Digital Graveyard Demo Script</h1>
+    <p class="lede">A 90-second pitch and an 8-minute walkthrough of <a href="https://digitalgraveyard.cv" target="_blank" rel="noreferrer">digitalgraveyard.cv</a>, with two people reviving one project side by side. Every step below was run on the live site on 18 Nov 2026.</p>
+    <div class="meta"><span>Pitch ≈ 1:30</span><span>Demo ≈ 8:00</span><span>Q&amp;A ≈ 3:00</span></div>
+  </header>
+
+  <section>
+    <h2>Before class</h2>
+    <ul class="check">
+      <li><span>Open two browser windows next to each other: a <strong>normal window</strong> (Window A) and an <strong>incognito / private window</strong> (Window B). They must be separate, because two tabs in the same window share one login.</span></li>
+      <li><span>Sign in to <code>digitalgraveyard.cv</code> in each window with a different demo account (Sign In → email and password → <em>Log In with Email</em>).</span></li>
+      <li><span>Check that <code>angular/angular.js</code> is not already listed (search “angular” on Browse). If it is, use <code>atom/atom</code> in step 6 instead.</span></li>
+      <li><span>Hard refresh both windows (<span class="mono">Ctrl + Shift + R</span>) so they load the latest version.</span></li>
+      <li><span><strong>Strongly recommended:</strong> do one real revival the night before (see “Prepare the big finish” below), so you can show a project turning ✨ Revived.</span></li>
+    </ul>
+    <div class="accounts">
+      <div class="account"><span class="eyebrow">Window A</span><strong>Digger-1042</strong><span class="mono">sarah.chen@campus.edu</span></div>
+      <div class="account"><span class="eyebrow">Window B (incognito)</span><strong>Digger-2099</strong><span class="mono">alex.rivera@campus.edu</span></div>
+    </div>
+    <p class="see">Both demo accounts use the shared demo password from the project's seed script (<span class="mono">password123</span>). They are public demo logins, not real accounts.</p>
+  </section>
+
+  <section>
+    <h2>The pitch</h2>
+    <div class="pitch">
+      <p><span class="beat">Problem</span>Every year thousands of good open-source projects die. The maintainer gets a job, burns out or loses interest, and the code freezes. GitHub is full of them: 30,000-star projects nobody has touched in years.</p>
+      <p><span class="beat">Why nobody revives them</span>Three questions stop people. Am I even allowed to continue this? Why did it die, and will I hit the same wall? If I put in the work, will anyone know it was me?</p>
+      <p><span class="beat">Our answer</span>Digital Graveyard is a catalogue of dead projects that are legal to revive. We only list a repo if GitHub confirms it's abandoned <em>and</em> its open-source license already allows forking. Each grave gets an autopsy built from its real commit history that says why it died and where to start. Git itself is the proof of work: a revival only counts when your fork has new commits made after you claimed it.</p>
+      <p><span class="beat">Why it's different</span>No mock data, no manual review, no permission emails. The law (the license), the data (GitHub history) and the proof (git commits) are all things nobody can fake. And revivals are community projects: many people can join one grave.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Demo path</h2>
+    <p class="intro">Each step lists what to click, what to say, and what the class will see. Times are cumulative targets.</p>
+    <ol class="steps">
+      <li><div class="step">
+        <div class="step-head"><h3>Home page</h3><span class="time">0:00 – 0:40</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Window A on the home page. Read the one-line intro, then scroll to <em>Featured Preserved Artifacts</em>.</div>
+          <div><span class="label">Say</span><p class="say">Every project dies eventually, but most of them are legally allowed to come back. We find them, explain why they died, and help people revive them. Everything you see is a real GitHub repository.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Browse the graveyard</h3><span class="time">0:40 – 1:30</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Click <em>Artifacts</em>. Set <em>Grave Type</em> to <em>Open Graves</em>, sort by <em>Highest Revival Potential</em>. Point at a card's revival score and “Last commit X years ago”.</div>
+          <div><span class="label">Say</span><p class="say">21 real abandoned projects, each scored 0–100 on how easy it is to revive: how recently it died, README quality, how many people worked on it, how many issues got closed, and stars.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>The autopsy</h3><span class="time">1:30 – 3:00</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Open <strong>brackets</strong> (Adobe's code editor, 33k stars). Read the hero line “Originally built by @adobe”. Click <em>🔬 Autopsy &amp; Diagnostics</em>.</div>
+          <div><span class="label">Say</span><p class="say">This is generated from its whole commit history. It peaked in 2012 with over 6,000 commits. The diagnosis is maintainer departure: the lead contributor stopped about four years before the last commit, others kept it going, then it stalled. It even tells the next person where to start: 2,600 open issues are a ready-made to-do list.</p></div>
+        </div>
+        <p class="see">Other causes the system finds: Gradual Fade-out, Abrupt Stop, Solo Maintainer Burnout, Overwhelmed by Issues. Open a second grave if you want to show a different one.</p>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Why it's legal</h3><span class="time">3:00 – 3:30</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Scroll to <em>System Enforced Trust Guarantees</em> on the Overview tab.</div>
+          <div><span class="label">Say</span><p class="say">We don't ask anyone's permission because the license already gave it. MIT says anyone may fork and modify this as long as they credit the author, so the original author stays credited on this page forever.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>The legal check refuses a live project</h3><span class="time">3:30 – 4:00</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Click <em>Submit</em>. In <em>🔎 Suggest a Dead Repo</em>, paste <code>https://github.com/moment/moment</code> → <em>Check &amp; List</em>.</div>
+          <div><span class="label">Say</span><p class="say">Anyone can add graves, but the rules are enforced. Moment.js says it's “done”, but people still push to it, so by our rule it isn't dead. Refused, with the reason.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Add a grave live</h3><span class="time">4:00 – 4:40</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Paste <code>https://github.com/angular/angular.js</code> → <em>Check &amp; List</em>. Wait about 10 seconds; it opens the new grave. Show the score and the Autopsy tab.</div>
+          <div><span class="label">Say</span><p class="say">AngularJS: Google's framework, used by millions of sites, archived in 2022. Archived plus MIT license means it's legal. Title, category and autopsy came straight from GitHub, so the catalogue grows without us.</p></div>
+        </div>
+        <div class="note warn"><strong>If it says “already in the graveyard”,</strong> click <em>View it →</em> and carry on, or use <code>atom/atom</code> (takes about 25 seconds).</div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Two people revive it side by side</h3><span class="time">4:40 – 6:00</span></div>
+        <div class="side">
+          <div class="window"><span class="who">Window A · Digger-1042</span>On the new angular.js grave: <em>🌱 Claim &amp; Revive</em> tab, then <em>Claim &amp; Start Reviving</em>. The sidebar shows the Fork on GitHub button and the Revival Crew with 1 person.</div>
+          <div class="window"><span class="who">Window B · Digger-2099</span>Open the same grave (Browse → search “angular”). It says “1 person is reviving this right now”. Click <em>🤝 Join the Revival</em>.</div>
+        </div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Refresh Window A. The crew now lists both people, and A's panel says “You are reviving this with 1 other”.</div>
+          <div><span class="label">Say</span><p class="say">Revivals are community projects. There's no stake and no gatekeeper, and anyone can join. The first verified fork becomes the community fork that everyone else sends pull requests to. If you drop out, nothing bad happens; your claim just lapses after 14 days.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Try to cheat the verifier</h3><span class="time">6:00 – 6:50</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>In Window B click <em>Submit My Fork for Verification</em>, add a note, paste <code>https://github.com/vercel/next.js</code> → <em>Verify My Revival</em>.</div>
+          <div><span class="label">Say</span><p class="say">Let's try to take credit for someone else's code. Refused: that isn't a fork of the original. A real fork with no new commits is refused too. A revival only counts when GitHub shows new commits made after you claimed it, so nobody has to review anything by hand.</p></div>
+        </div>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>The big finish: a verified revival</h3><span class="time">6:50 – 7:30</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Only if you prepared it: open the grave you revived the night before. It shows ✨ Revived, the verified fork in the crew, and <em>Community Fork (send PRs here)</em>.</div>
+          <div><span class="label">Say</span><p class="say">This one is alive again. The verifier confirmed real commits after the claim, the reviver got 100 credits and reputation, and the fork is linked for the next person.</p></div>
+        </div>
+        <p class="see">Not prepared? Skip to step 9 and say: “When a fork passes, the grave flips to Revived and the fork becomes the community fork.”</p>
+      </div></li>
+
+      <li><div class="step">
+        <div class="step-head"><h3>Dashboard and manifesto</h3><span class="time">7:30 – 8:00</span></div>
+        <div class="do-say">
+          <div><span class="label">Do</span>Window A: <em>Dashboard</em> → <em>My Claims &amp; Work</em>. Then <em>Manifesto</em>, open the first FAQ.</div>
+          <div><span class="label">Say</span><p class="say">Your claims, credits and reputation live here. The manifesto explains the two kinds of graves: open graves anyone can revive, and donated projects whose owners hand them over, with a stake to stop builders from ghosting.</p></div>
+        </div>
+        <p class="see">Afterwards, click <em>Leave This Revival</em> in both windows so the grave goes back to Dead. Leaving costs nothing.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Prepare the big finish</h2>
+    <p class="intro">About 15 minutes the night before. Use a small grave and your own GitHub account.</p>
+    <ol class="steps">
+      <li><div class="step"><p>Sign in as yourself (or a demo account), open a small grave such as <strong>clumsy-bird</strong> or <strong>panelkit</strong>, and click <em>Claim &amp; Start Reviving</em>.</p></div></li>
+      <li><div class="step"><p>Click <em>Fork on GitHub</em> and fork it into your account.</p></div></li>
+      <li><div class="step"><p>Make one real improvement in your fork after claiming (fix the README install steps, bump a dependency) and commit it.</p></div></li>
+      <li><div class="step"><p>Back on the grave: <em>Submit My Fork for Verification</em>, paste your fork's URL. It should flip to ✨ Revived.</p></div></li>
+    </ol>
+    <div class="note good">If you sign in with an account that has GitHub linked, the commit must be made by that GitHub account, so other people can't take credit for your fork.</div>
+  </section>
+
+  <section>
+    <h2>Questions you'll likely get</h2>
+    <dl class="qa">
+      <dt>Isn't this plagiarism?</dt>
+      <dd>No. We only list code whose license explicitly allows copying and modifying it, the original author is credited on the page and in git history, and the original repository is never touched.</dd>
+      <dt>Why not just use GitHub's search?</dt>
+      <dd>GitHub can't tell you if a repo is dead, legal to revive, or why it died. We combine all three, track who's working on it so people don't duplicate effort, and verify revivals.</dd>
+      <dt>How do you stop fake revivals?</dt>
+      <dd>The fork must be a real GitHub fork of the original, with commits made after your claim. If your account has GitHub linked, at least one of those commits has to be yours.</dd>
+      <dt>What if two people want the same project?</dt>
+      <dd>Both join. Open graves are community projects, and the first verified fork becomes the shared one everyone contributes to.</dd>
+      <dt>Is any of the data fake?</dt>
+      <dd>No. Every grave, score and autopsy comes from GitHub's API. The only made-up things are the six demo accounts used for presenting.</dd>
+      <dt>What about projects that aren't open source?</dt>
+      <dd>Only their owner can list them, as a donated project. The owner proves ownership with their GitHub account, and the builder puts down a credit stake so they can't ghost.</dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Under the hood</h2>
+    <p class="intro">For the software engineering part of the presentation.</p>
+    <div class="stack">
+      <div><b>Frontend and API</b><span>Next.js 14, React, API routes</span></div>
+      <div><b>Database</b><span>PostgreSQL on Neon through Prisma; schema applied safely on every deploy</span></div>
+      <div><b>Data source</b><span>GitHub GraphQL and REST APIs: commits, contributor stats, license, forks, compare</span></div>
+      <div><b>Hosting</b><span>Vercel, custom domain, daily cron job that expires claims and refreshes repo data</span></div>
+      <div><b>Security</b><span>Signed session cookies, demo accounts locked to demo use, GitHub identities hidden from other users</span></div>
+      <div><b>Integrity</b><span>Legal check and fork verification both run on the server, so the browser can't skip them</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Tested on the live site</h2>
+    <p class="intro">Run on 18 Nov 2026 with two separate sessions (Digger-2099 and Digger-7700) on the kotlin-koans grave, then cleaned up.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Check</th><th>What happened</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Pages load</td><td>Home, Browse, Submit, Dashboard, Manifesto, Login, all under 1 second</td><td class="pass">Pass</td></tr>
+          <tr><td>First person claims</td><td>Grave went Dead → being revived; the other session saw it immediately</td><td class="pass">Pass</td></tr>
+          <tr><td>Second person joins</td><td>“You joined 1 other reviver!”; both sessions and a logged-out visitor saw a crew of 2</td><td class="pass">Pass</td></tr>
+          <tr><td>Double claim</td><td>“You are already reviving this project.”</td><td class="pass">Pass</td></tr>
+          <tr><td>Submit a non-fork</td><td>“That repository is not a fork of Kotlin/kotlin-koans.”</td><td class="pass">Pass</td></tr>
+          <tr><td>Submit a fork with no new commits</td><td>“Your fork has no new commits since you claimed this project yet.”</td><td class="pass">Pass</td></tr>
+          <tr><td>Suggest an active repo</td><td>moment/moment refused: still maintained</td><td class="pass">Pass</td></tr>
+          <tr><td>Suggest a duplicate</td><td>adobe/brackets refused: already in the graveyard</td><td class="pass">Pass</td></tr>
+          <tr><td>Suggest a dead repo</td><td>request/request listed in 13 seconds with autopsy and score 76</td><td class="pass">Pass</td></tr>
+          <tr><td>Leave the revival</td><td>Both left, grave back to Dead, reputation unchanged, no strikes</td><td class="pass">Pass</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note warn"><strong>Two things not shown live yet.</strong> A successful verification (needs the real fork from “Prepare the big finish”), and the Credit Ledger tab, which is empty for the demo accounts because they were created with their starting credits but no ledger entries.</div>
+  </section>
+</main>
