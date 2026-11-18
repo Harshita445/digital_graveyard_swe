@@ -1,5 +1,6 @@
 import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
+import { refreshOpenGraveStatus } from '../../../lib/revivers';
 import { recordLedgerEntry } from '../../../lib/ledger';
 import { verifyRevivalFork } from '../../../lib/githubIntelligence';
 
@@ -76,6 +77,18 @@ async function handleSubmit(req, res, id) {
       const check = await verifyRevivalFork(commitment.project.githubRepoUrl, deliverableUrl, commitment.committedAt);
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
+      // Several people may submit the same community fork, so when the reviver has linked
+      // GitHub, at least one of the new commits must be theirs.
+      const taker = await prisma.user.findUnique({ where: { id: takerId }, select: { githubUsername: true } });
+      if (taker?.githubUsername) {
+        const mineCount = check.authors.filter(a => a.toLowerCase() === taker.githubUsername.toLowerCase()).length;
+        if (mineCount === 0) {
+          return res.status(400).json({
+            error: `None of the new commits in that fork were made by your GitHub account. Push at least one commit of your own, then submit again.`
+          });
+        }
+      }
+
       const evidence = `Verified fork ${check.forkUrl}: ${check.newCommits} new commit(s) since claim` +
         (check.authors.length ? ` by ${check.authors.join(', ')}` : '') + `, ${check.aheadBy} ahead of the original.`;
 
@@ -98,9 +111,14 @@ async function handleSubmit(req, res, id) {
         relatedCommitmentId: commitment.id,
         notes: `Revived ${commitment.project.title}. ${evidence}`
       });
+      // The first verified fork becomes the community fork; later revivers are credited too.
       await prisma.project.update({
         where: { id: commitment.projectId },
-        data: { status: 'COMPLETED', revivedRepoUrl: check.forkUrl, reviewTimeoutAt: null }
+        data: {
+          status: 'COMPLETED',
+          revivedRepoUrl: commitment.project.revivedRepoUrl || check.forkUrl,
+          reviewTimeoutAt: null
+        }
       });
 
       return res.status(200).json({ message: `Revival verified! ${evidence}`, verification: check });
@@ -182,6 +200,16 @@ async function handleWithdraw(req, res, id) {
       return res.status(200).json({
         message: 'Commitment withdrawn. -2 reputation penalty recorded. Project relisted.'
       });
+    }
+
+    // Leaving an open-grave revival costs nothing: nobody was waiting on you.
+    if (commitment.project.source === 'OPEN_GRAVE' && commitment.status === 'ACTIVE') {
+      await prisma.commitment.update({
+        where: { id: commitment.id },
+        data: { status: 'CANCELLED', resolvedAt: new Date() }
+      });
+      await refreshOpenGraveStatus(commitment.projectId);
+      return res.status(200).json({ message: 'You left this revival. You can join again any time.' });
     }
 
     return res.status(400).json({

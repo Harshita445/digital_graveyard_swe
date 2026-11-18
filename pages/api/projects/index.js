@@ -1,7 +1,8 @@
 import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
 import { enrichProject } from '../../../lib/mockFallback';
-import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest, isOpenLicense } from '../../../lib/githubIntelligence';
+import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest } from '../../../lib/githubIntelligence';
+import { classifyRepoForListing } from '../../../lib/listing';
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -117,27 +118,18 @@ export default async function handler(req, res) {
         }
 
         const repo = await githubRest(`/repos/${parsedRepo.owner}/${parsedRepo.name}`).catch(() => null);
-        if (!repo) {
+        if (!repo || repo.private) {
           return res.status(400).json({ error: 'Could not find that repository on GitHub. Is it public?' });
         }
-        const isOwner = user.githubUsername && repo.owner?.login?.toLowerCase() === user.githubUsername.toLowerCase();
-        const monthsInactive = (Date.now() - new Date(repo.pushed_at).getTime()) / (30 * 86400000);
-        const abandoned = repo.archived || monthsInactive >= 12;
-        const openLicense = isOpenLicense(repo.license?.spdx_id);
-
-        if (isOwner) {
-          source = 'DONATED';
-        } else if (abandoned && openLicense) {
-          source = 'OPEN_GRAVE';
-        } else {
-          const reasons = [];
-          if (!user.githubUsername) reasons.push('connect your GitHub account to prove you own it');
-          if (!openLicense) reasons.push(`it has no open-source license (${repo.license?.spdx_id || 'none'}), so only its owner can list it`);
-          else if (!abandoned) reasons.push('it is still actively maintained');
+        const verdict = classifyRepoForListing(repo, user.githubUsername);
+        if (!verdict.ok) {
+          const reasons = [...verdict.reasons];
+          if (!user.githubUsername) reasons.push('if it is yours, connect your GitHub account to prove you own it');
           return res.status(403).json({
             error: `You can't list ${repo.full_name}: ${reasons.join('; ')}. You can list repos you own, or abandoned repos whose license allows forking.`
           });
         }
+        source = verdict.source;
       }
 
       const normalizedCategory = category === 'Cybersecurity' ? 'Security' : category;

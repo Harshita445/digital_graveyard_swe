@@ -7,11 +7,13 @@ const fmt = d => (d ? new Date(d).toLocaleDateString() : null);
 
 // Every step is ticked off by real data (GitHub checks or the system's own records).
 // Nobody clicks "sign": an open grave has no owner around to sign anything.
-function openGraveSteps(project, commitment) {
-  const s = project.status;
-  const claimed = ['ACTIVE', 'SUBMITTED', 'COMPLETED'].includes(s) && Boolean(commitment);
-  const revived = s === 'COMPLETED';
+function openGraveSteps(project, revivers) {
+  const revived = project.status === 'COMPLETED';
   const author = project.githubRepoOwner ? `@${project.githubRepoOwner}` : 'the original author';
+  const first = revivers[0];
+  const firstVerified = revivers.filter(r => r.verifiedAt).sort((a, b) => new Date(a.verifiedAt) - new Date(b.verifiedAt))[0];
+  const names = revivers.map(r => r.alias);
+  const crew = names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
   return [
     {
       title: 'Grave verified as dead and legally revivable',
@@ -21,25 +23,25 @@ function openGraveSteps(project, commitment) {
       when: fmt(project.createdAt)
     },
     {
-      title: 'Claimed by a reviver',
-      description: claimed
-        ? `${commitment.taker?.alias || 'A Digger'} claimed it${commitment.ghostDeadlineAt && !revived ? ` and has until ${fmt(commitment.ghostDeadlineAt)} to submit a fork` : ''}.`
-        : 'Free to claim. Claiming tells everyone you are working on it for the next 14 days.',
+      title: 'Claimed by revivers',
+      description: first
+        ? `${crew} ${names.length === 1 ? 'has' : 'have'} joined. It is a community project, so anyone else can join too.`
+        : 'Free to claim, and more people can join later. Claiming tells everyone you are working on it for the next 14 days.',
       checkedBy: 'System',
-      done: claimed,
-      when: claimed ? fmt(commitment.committedAt) : null
+      done: Boolean(first),
+      when: first ? fmt(first.joinedAt) : null
     },
     {
-      title: 'Fork has new commits made after the claim',
-      description: 'When you submit your fork, GitHub is asked whether it really is a fork of the original and whether it has commits newer than your claim. Copied code or old commits are rejected.',
+      title: 'A fork has new commits made after the claim',
+      description: 'When a reviver submits a fork, GitHub is asked whether it really is a fork of the original and whether it has commits newer than their claim. If they linked GitHub, at least one of those commits must be theirs.',
       checkedBy: 'GitHub',
       done: revived,
-      when: revived ? fmt(commitment?.resolvedAt) : null
+      when: firstVerified ? fmt(firstVerified.verifiedAt) : null
     },
     {
       title: 'Revived, with the original author credited',
       description: revived
-        ? `The revival lives in its own fork. ${author} stays credited as the creator, as the license requires.`
+        ? `The first verified fork is now the community fork: later revivers send it pull requests. ${author} stays credited as the creator, as the license requires.`
         : `Once verified, the fork is linked here and ${author} stays credited as the creator.`,
       checkedBy: 'System',
       done: revived,
@@ -90,9 +92,9 @@ function donatedSteps(project, commitment) {
   ];
 }
 
-export default function HandoverChecklist({ project, commitment }) {
+export default function HandoverChecklist({ project, commitment, revivers = [] }) {
   const isOpenGrave = project?.source === 'OPEN_GRAVE';
-  const steps = isOpenGrave ? openGraveSteps(project, commitment) : donatedSteps(project, commitment);
+  const steps = isOpenGrave ? openGraveSteps(project, revivers) : donatedSteps(project, commitment);
   const isCompleted = project?.status === 'COMPLETED';
   let growthStage = 'tombstone';
   if (isCompleted) growthStage = 'tree';

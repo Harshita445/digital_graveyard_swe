@@ -17,6 +17,7 @@ export default function ProjectDetails({ projectId }) {
   const [project, setProject] = useState(null);
   const [activeCommitment, setActiveCommitment] = useState(null);
   const [userRole, setUserRole] = useState('GUEST');
+  const [revivers, setRevivers] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -45,6 +46,7 @@ export default function ProjectDetails({ projectId }) {
         setProject(data.project);
         setActiveCommitment(data.activeCommitment);
         setUserRole(data.userRole);
+        setRevivers(data.revivers || []);
         setLoading(false);
         return;
       }
@@ -256,13 +258,16 @@ export default function ProjectDetails({ projectId }) {
         method: 'POST',
         headers: { 'x-user-id': currentUser.id }
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const data = await res.json();
         addToast(data.message, 'info');
         await fetchProjectDetail();
         await refreshUser();
         return;
       }
+      addToast(data.error || 'Could not leave this project.', 'error');
+      setActionLoading(false);
+      return;
     } catch (err) {
       // Handled in fallback
     }
@@ -490,6 +495,9 @@ export default function ProjectDetails({ projectId }) {
   const isCompleted = project.status === 'COMPLETED';
   const github = project.githubIntelligence;
   const isOpenGrave = project.source === 'OPEN_GRAVE';
+  // On open graves many people revive at once: "done" means *your* fork was verified.
+  const myRevivalDone = isOpenGrave ? activeCommitment?.status === 'COMPLETED' : isCompleted;
+  const workingCount = revivers.filter(r => r.status === 'ACTIVE').length;
 
   return (
     <div className="container" style={{ padding: '36px 0 70px' }}>
@@ -841,7 +849,7 @@ export default function ProjectDetails({ projectId }) {
             <div>
               {/* Stewardship Handover Protocol & Transformation */}
               <div style={{ marginBottom: 24 }}>
-                <HandoverChecklist project={project} commitment={activeCommitment} />
+                <HandoverChecklist project={project} commitment={activeCommitment} revivers={revivers} />
               </div>
 
               {/* Milestones Section */}
@@ -1014,7 +1022,11 @@ export default function ProjectDetails({ projectId }) {
             {isTaker && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ padding: '10px 12px', background: 'rgba(95,179,163,.12)', borderRadius: 8, fontSize: 13, color: 'var(--accent-2)' }}>
-                  🛠️ You are the committed builder for this codebase.
+                  {isOpenGrave
+                    ? (myRevivalDone
+                      ? '✨ You helped revive this project.'
+                      : `🛠️ You are reviving this${workingCount > 1 ? ` with ${workingCount - 1} other${workingCount === 2 ? '' : 's'}` : ''}.`)
+                    : '🛠️ You are the committed builder for this codebase.'}
                 </div>
 
                 {/* A. Pending approval */}
@@ -1038,15 +1050,31 @@ export default function ProjectDetails({ projectId }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {isOpenGrave ? (
                       <>
-                        <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                          <li>Fork the original on GitHub.</li>
-                          <li>Get it working again and push commits to your fork.</li>
-                          <li>Submit your fork&apos;s URL. We verify it automatically.</li>
-                        </ol>
-                        <a className="btn btn-primary btn-block" href={`${project.githubRepoUrl}/fork`} target="_blank" rel="noreferrer"
-                          style={{ textAlign: 'center', textDecoration: 'none' }}>
-                          Fork on GitHub ↗
-                        </a>
+                        {project.revivedRepoUrl ? (
+                          <>
+                            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                              <li>Fork the <strong>community fork</strong> (the living version) and send it pull requests, or keep your own fork.</li>
+                              <li>Push at least one commit of your own.</li>
+                              <li>Submit the fork with your commits. We verify it automatically.</li>
+                            </ol>
+                            <a className="btn btn-primary btn-block" href={project.revivedRepoUrl} target="_blank" rel="noreferrer"
+                              style={{ textAlign: 'center', textDecoration: 'none' }}>
+                              Open Community Fork ↗
+                            </a>
+                          </>
+                        ) : (
+                          <>
+                            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                              <li>Fork the original on GitHub{workingCount > 1 ? ', or team up with the other revivers in one fork' : ''}.</li>
+                              <li>Get it working again and push commits.</li>
+                              <li>Submit your fork&apos;s URL. We verify it automatically.</li>
+                            </ol>
+                            <a className="btn btn-primary btn-block" href={`${project.githubRepoUrl}/fork`} target="_blank" rel="noreferrer"
+                              style={{ textAlign: 'center', textDecoration: 'none' }}>
+                              Fork on GitHub ↗
+                            </a>
+                          </>
+                        )}
                       </>
                     ) : (
                       <>
@@ -1075,9 +1103,14 @@ export default function ProjectDetails({ projectId }) {
 
                     <div style={{ fontSize: 11.5, color: 'var(--text-dim)', textAlign: 'center' }}>
                       {isOpenGrave
-                        ? `Claim expires ${new Date(activeCommitment.ghostDeadlineAt).toLocaleDateString()} if no work is submitted.`
+                        ? `Your claim lapses on ${new Date(activeCommitment.ghostDeadlineAt).toLocaleDateString()} if no fork is verified. No penalty.`
                         : 'Submit when finished to start the owner\'s 7-day review window.'}
                     </div>
+                    {isOpenGrave && (
+                      <button className="btn btn-outline btn-sm btn-block" onClick={handleWithdraw} disabled={actionLoading}>
+                        Leave This Revival
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1094,7 +1127,7 @@ export default function ProjectDetails({ projectId }) {
                 )}
 
                 {/* D. Completed */}
-                {isCompleted && (
+                {myRevivalDone && (
                   <div style={{ padding: '12px', background: 'rgba(95,179,163,.15)', borderRadius: 10, fontSize: 13, color: 'var(--accent-2)' }}>
                     🎉 You revived it! 100 reward credits and +15 reputation were added to your ledger.
                     {activeCommitment?.submissionNotes && (
@@ -1108,11 +1141,15 @@ export default function ProjectDetails({ projectId }) {
             {/* CASE 3: GUEST / UNCOMMITTED USER */}
             {!isOwner && !isTaker && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {project.status === 'LISTED' && isOpenGrave ? (
+                {isOpenGrave ? (
                   <>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                      Free to claim: no stake and no owner approval, because the license already allows forking.
-                      Claiming tells others you&apos;re working on it for the next 14 days.
+                      {isCompleted
+                        ? 'Already revived, and it is a community project: join to keep improving the living version. Your own verified commits earn you credit too.'
+                        : workingCount > 0
+                          ? `${workingCount} ${workingCount === 1 ? 'person is' : 'people are'} reviving this right now. It is a community project, so you can join them.`
+                          : 'Free to claim: no stake and no owner approval, because the license already allows forking.'}
+                      {' '}Joining is free and lasts 14 days.
                     </div>
                     <div className="surface2" style={{ padding: 14, borderRadius: 10, fontSize: 13 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -1124,12 +1161,12 @@ export default function ProjectDetails({ projectId }) {
                     </div>
                     {currentUser ? (
                       <button className="btn btn-primary btn-block" onClick={handleCommit} disabled={actionLoading}>
-                        {actionLoading ? 'Claiming...' : '🌱 Claim & Start Reviving'}
+                        {actionLoading ? 'Joining...' : (workingCount > 0 || isCompleted) ? '🤝 Join the Revival' : '🌱 Claim & Start Reviving'}
                       </button>
                     ) : (
                       <Link href={`/login?redirect=/project/${project.id}`} className="btn btn-primary btn-block"
                         style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        Sign In to Claim →
+                        {(workingCount > 0 || isCompleted) ? 'Sign In to Join →' : 'Sign In to Claim →'}
                       </Link>
                     )}
                   </>
@@ -1190,6 +1227,49 @@ export default function ProjectDetails({ projectId }) {
                   <div style={{ padding: '14px', background: 'var(--surface-2)', borderRadius: 10, fontSize: 13, color: 'var(--text-dim)', textAlign: 'center' }}>
                     🌱 Someone is reviving this right now.
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Revival crew: everyone who joined this community project */}
+            {isOpenGrave && (
+              <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1.5px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <h4 className="font-display" style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Revival Crew</h4>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>
+                    {revivers.length === 0 ? 'nobody yet' : `${revivers.length} ${revivers.length === 1 ? 'person' : 'people'}`}
+                  </span>
+                </div>
+                {revivers.length === 0 ? (
+                  <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: 0 }}>Be the first to join. Anyone else can join you later.</p>
+                ) : (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {revivers.map(r => (
+                      <li key={r.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                          <strong>{r.alias}</strong>
+                          {currentUser?.alias === r.alias && <span style={{ color: 'var(--text-dim)' }}> (you)</span>}
+                        </span>
+                        {r.status === 'COMPLETED' ? (
+                          r.forkUrl ? (
+                            <a href={r.forkUrl} target="_blank" rel="noreferrer" style={{ color: '#15803d', fontWeight: 700 }}>✨ verified fork ↗</a>
+                          ) : (
+                            <span style={{ color: '#15803d', fontWeight: 700 }}>✨ verified</span>
+                          )
+                        ) : (
+                          <span style={{ color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                            joined {new Date(r.joinedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {project.revivedRepoUrl && (
+                  <a href={project.revivedRepoUrl} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm btn-block"
+                    style={{ marginTop: 12, textAlign: 'center', textDecoration: 'none' }}>
+                    Community Fork (send PRs here) ↗
+                  </a>
                 )}
               </div>
             )}

@@ -1,6 +1,7 @@
 import prisma from '../../../lib/prisma';
 import { applyTakerGhostPenalty, applyOwnerGhostPenalty, recordLedgerEntry } from '../../../lib/ledger';
 import { analyzeGitHubRepository } from '../../../lib/githubIntelligence';
+import { refreshOpenGraveStatus } from '../../../lib/revivers';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST' && req.method !== 'GET') {
@@ -65,6 +66,14 @@ export default async function handler(req, res) {
     });
 
     for (const comm of ghostedTakers) {
+      // Open-grave claims just lapse: nobody was waiting on them, so there is no penalty.
+      if (comm.project.source === 'OPEN_GRAVE') {
+        await prisma.commitment.update({ where: { id: comm.id }, data: { status: 'EXPIRED', resolvedAt: effectiveNow } });
+        await refreshOpenGraveStatus(comm.projectId);
+        log.push(`[CLAIM EXPIRED] ${comm.taker.alias}'s claim on open grave "${comm.project.title}" lapsed after 14 days with no verified fork. No penalty.`);
+        continue;
+      }
+
       await applyTakerGhostPenalty({
         takerId: comm.takerId,
         ownerId: comm.project.ownerId,

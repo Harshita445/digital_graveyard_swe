@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
+import { refreshOpenGraveStatus, reviversOf, OPEN_GRAVE_CLAIM_DAYS } from '../../../lib/revivers';
 import { recordLedgerEntry } from '../../../lib/ledger';
 import { enrichProject } from '../../../lib/mockFallback';
 import { analyzeGitHubRepository } from '../../../lib/githubIntelligence';
@@ -103,16 +104,20 @@ async function handleGetProject(req, res, id) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const activeCommitment = project.commitments.find(c =>
-      ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED'].includes(c.status)
-    ) || project.commitments[0] || null;
+    const isOpenGrave = project.source === 'OPEN_GRAVE';
+    // Open graves can have many revivers, so "your" commitment is the one that matters.
+    const activeCommitment = isOpenGrave
+      ? (project.commitments.find(c => c.takerId === currentUserId && ['ACTIVE', 'COMPLETED'].includes(c.status)) || null)
+      : (project.commitments.find(c => ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED'].includes(c.status)) || project.commitments[0] || null);
 
-    const isOwner = currentUserId === project.ownerId;
-    const isTaker = activeCommitment && currentUserId === activeCommitment.takerId;
+    // An open grave's lister is its discoverer, not its owner: there is nothing for them to approve.
+    const isOwner = !isOpenGrave && currentUserId === project.ownerId;
+    const isTaker = Boolean(activeCommitment && currentUserId && currentUserId === activeCommitment.takerId);
 
     return res.status(200).json({
       project: enrichProject(project),
       activeCommitment,
+      revivers: isOpenGrave ? reviversOf(project.commitments) : [],
       userRole: isOwner ? 'OWNER' : isTaker ? 'TAKER' : 'GUEST'
     });
   } catch (err) {
@@ -152,17 +157,24 @@ async function handleCommit(req, res, id) {
 
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    if (project.ownerId === takerId) {
+    // Whoever listed an open grave only discovered it; they can revive it like anyone else.
+    if (project.ownerId === takerId && project.source !== 'OPEN_GRAVE') {
       return res.status(400).json({ error: 'You cannot claim your own project' });
     }
 
-    if (project.commitments.length > 0) {
-      return res.status(409).json({ error: 'This project already has an active commitment' });
-    }
-
-    // Open graves have no owner to approve a claim: the open-source license already
-    // allows forking, so the claim starts immediately and costs no stake.
+    // Open graves are community projects: no owner approval, no stake, and any number of
+    // people can revive one at once. Each person gets one claim at a time and one reward.
     if (project.source === 'OPEN_GRAVE') {
+      const mine = await prisma.commitment.findFirst({
+        where: { projectId: project.id, takerId, status: { in: ['ACTIVE', 'COMPLETED'] } }
+      });
+      if (mine?.status === 'ACTIVE') {
+        return res.status(409).json({ error: 'You are already reviving this project.' });
+      }
+      if (mine?.status === 'COMPLETED') {
+        return res.status(409).json({ error: 'You already revived this project. Keep pushing to your fork; the revival stays credited to you.' });
+      }
+
       const openCommitment = await prisma.commitment.create({
         data: {
           projectId: project.id,
@@ -171,14 +183,21 @@ async function handleCommit(req, res, id) {
           stakeLocked: 0,
           committedAt: new Date(),
           approvedAt: new Date(),
-          ghostDeadlineAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+          ghostDeadlineAt: new Date(Date.now() + OPEN_GRAVE_CLAIM_DAYS * 24 * 60 * 60 * 1000)
         }
       });
-      await prisma.project.update({ where: { id: project.id }, data: { status: 'ACTIVE' } });
+      await refreshOpenGraveStatus(project.id);
+      const others = project.commitments.filter(c => c.status === 'ACTIVE').length;
       return res.status(201).json({
         commitment: openCommitment,
-        message: 'Claimed! Fork the repository on GitHub, push your work, then submit your fork URL to be verified.'
+        message: others > 0
+          ? `You joined ${others} other reviver${others === 1 ? '' : 's'}! ${project.revivedRepoUrl ? 'Send pull requests to the community fork or work in your own' : 'Team up in one fork or work in your own'}, then submit a fork with your commits to be verified.`
+          : 'Claimed! Fork the repository on GitHub, push your work, then submit your fork URL to be verified.'
       });
+    }
+
+    if (project.commitments.length > 0) {
+      return res.status(409).json({ error: 'This project already has an active commitment' });
     }
 
     if (taker.credits < project.stakeRequired) {

@@ -21,6 +21,35 @@ export default function SubmitProject() {
   const [milestoneMode, setMilestoneMode] = useState(false);
   const [handoffNote, setHandoffNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [suggestUrl, setSuggestUrl] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestResult, setSuggestResult] = useState(null); // { ok, text, projectId }
+
+  // Quick path: one URL, the server runs the legal check and fills in everything else from GitHub.
+  const handleSuggest = async (e) => {
+    e.preventDefault();
+    if (!suggestUrl.trim()) return;
+    setSuggesting(true);
+    setSuggestResult(null);
+    try {
+      const res = await fetch('/api/projects/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoUrl: suggestUrl.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        addToast('Listed as an open grave!', 'success');
+        router.push(`/project/${data.project.id}`);
+        return;
+      }
+      setSuggestResult({ ok: false, text: data.error || 'That repository could not be listed.', projectId: data.projectId });
+    } catch (err) {
+      setSuggestResult({ ok: false, text: 'Could not reach the server. Check your connection and try again.' });
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -169,6 +198,47 @@ export default function SubmitProject() {
           </ul>
         </div>
       </div>
+
+      {/* Quick suggest: just a URL */}
+      <form onSubmit={handleSuggest} className="card" style={{ padding: 24, marginBottom: 28, background: '#FFFFFF', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <h2 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>🔎 Suggest a Dead Repo</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '4px 0 0', lineHeight: 1.5 }}>
+            Found an abandoned project worth saving? Paste its link. If it&apos;s archived or silent for 12+ months and its license allows forking,
+            it&apos;s listed straight away. The title, category and autopsy come from GitHub.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="url"
+            className="input"
+            value={suggestUrl}
+            onChange={e => setSuggestUrl(e.target.value)}
+            placeholder="https://github.com/owner/repository"
+            style={{ flex: '1 1 260px' }}
+            aria-label="GitHub repository URL"
+            required
+          />
+          <button type="submit" className="btn btn-primary" disabled={suggesting || !suggestUrl.trim()}>
+            {suggesting ? 'Checking GitHub…' : 'Check & List'}
+          </button>
+        </div>
+        {suggesting && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Checking the license and activity, then building the autopsy. This can take up to 30 seconds.</div>
+        )}
+        {suggestResult && !suggestResult.ok && (
+          <div style={{ padding: '10px 12px', borderRadius: 8, background: '#FDE8E8', border: '1.5px solid var(--error)', fontSize: 13, lineHeight: 1.5 }}>
+            {suggestResult.text}
+            {suggestResult.projectId && (
+              <> <Link href={`/project/${suggestResult.projectId}`} style={{ fontWeight: 700, color: 'inherit' }}>View it →</Link></>
+            )}
+          </div>
+        )}
+      </form>
+
+      <h2 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: '0 0 12px' }}>
+        Donating your own project? Use the full form
+      </h2>
 
       <form
         onSubmit={handleSubmit}
