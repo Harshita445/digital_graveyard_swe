@@ -1,155 +1,213 @@
-# 🪦 Gravefin / Project Graveyard
+# 🪦 Digital Graveyard
 
-> *"A blind, escrow-backed marketplace for finishing other people's abandoned code."*
+**Find abandoned open-source projects you're allowed to revive, see why each one died, and bring it back, alone or with others.**
 
-Gravefin is a production-grade, trustless marketplace that resurrects abandoned student and developer side projects. Owners list dead repositories with a credit stake requirement; anonymous Diggers claim the codebase, lock their skin-in-the-game collateral in escrow, finish the code, and claim platform rewards upon verified delivery.
+🌐 Live at **[digitalgraveyard.cv](https://digitalgraveyard.cv)**
 
----
+Thousands of good open-source projects die every year. The maintainer gets a job, burns out or loses interest, and the code freezes. Three questions stop people from picking them up again:
 
-## ⚡ Key Highlights
+1. **Am I allowed to?** Is it legal to continue someone else's project?
+2. **Why did it die?** Will I hit the same wall?
+3. **Will anyone know it was me?** If I do the work, how do I prove it?
 
-- **Adversarial-Safe Architecture**: Assume zero trust between users. The backend and the append-only ledger are the only enforcers.
-- **Strict Anonymity**: Cross-user identifiers are randomly generated aliases (e.g. `Digger-1042`, `Digger-2099`). Real emails and contact info are private and never exposed to other users or public endpoints.
-- **HMAC SHA-256 Session Authentication**: Cryptographic session tokens stored in secure, `HttpOnly` cookies.
-- **Zero In-App Chat**: No chat or DMs. Eliminates subjective arguments, off-platform harassment, and bribery.
-- **Points-Based Escrow Economy**: Staking platform credits sidesteps financial/PCI compliance while enforcing skin-in-the-game commitment.
-- **Append-Only Immutable Ledger (`LedgerEntry`)**: Every stake lock, forfeiture, refund, reward, and penalty is permanently recorded with full auditability.
-- **Deterministic Automated Timeout Resolution**:
-  - **Taker Inactive (>14 days)** $\rightarrow$ Escrow forfeited to Owner, Taker −20 rep, +1 strike, codebase relisted.
-  - **Owner Ghosting (>7 days without review)** $\rightarrow$ Auto-completed, Taker refunded + rewarded, Owner −10 rep, +1 strike.
-  - **3 Ghost Strikes** $\rightarrow$ Account automatically restricted from creating listings or claiming projects.
-- **Interactive Protocol Sandbox (`/simulator`)**: Built-in visual simulation console to fast-forward time (+7d, +14d, +30d) and trigger automated cron resolution on demand.
-- **GraphQL API & GraphiQL Explorer (`/api/graphql` & `/graphql`)**: Production-grade GraphQL Yoga v5 endpoint and in-app query explorer to query projects, diggers, escrow commitments, and ledger entries.
+Digital Graveyard answers all three, using data nobody can fake: the project's **license**, its **GitHub history**, and **git commits** as proof of work.
 
 ---
 
-## 🛠️ Technology Stack
+## How it works
 
-- **Framework**: Next.js 14 (Pages Router)
-- **Frontend**: React 18 with Parchment Desk & Hand-Drawn Sketch Design Tokens (`Patrick Hand`, `Architects Daughter`, `Inter`)
-- **Visual Features**: 2D Excavation Cartography Quadrant Map, Forensic Autopsies, Provenance Timelines, Archivist Workbench, Community Leaderboards
-- **Database / ORM**: Prisma ORM with Neon Serverless PostgreSQL & local fallback
-- **Security**: Bcrypt password hashing, HMAC SHA-256 session signatures, HttpOnly cookie serialization
-- **Repository Intelligence**: GitHub GraphQL ingestion, weighted revival scoring, autopsy reports, and peak activity analysis
-
----
-
-## 📁 Streamlined Repository Structure
-
-```
-├── components/          # Reusable UI components
-│   ├── AutopsyChart.jsx       # Forensic autopsy report & Cause of Decline diagnostic badges
-│   ├── EscrowStatusBanner.jsx # Real-time state machine progress header
-│   ├── Footer.jsx             # Digital Graveyard archive footer
-│   ├── GraveyardMap.jsx       # 2D Cartesian excavation quadrant map
-│   ├── HandoverChecklist.jsx  # Dual sign-off protocol, blooming tree, & MilestoneTracker
-│   ├── Icons.jsx              # Hand-drawn SVG icon suite
-│   ├── Navbar.jsx             # Archive navigation, active persona pill, & campus toggle
-│   ├── ProjectCard.jsx        # Tombstone card with headstone frame & health score
-│   └── ProvenanceTimeline.jsx # Append-only cryptographic hash chain
-├── context/             # Global application & auth context (AppContext.jsx)
-├── lib/                 # Core server libraries
-│   ├── auth.js          # Cryptographic session tokens, cookies, hashing
-│   ├── ledger.js        # Append-only transaction ledger & penalty logic
-│   ├── mockFallback.js  # Enriched local dataset for demo & static export
-│   └── prisma.js        # Prisma client singleton instance
-├── pages/
-│   ├── _app.jsx         # App wrapper & framed parchment desktop canvas
-│   ├── _document.jsx    # Custom HTML document & Google Font loaders
-│   ├── index.jsx        # Landing hero, lifecycle banner & philosophy pillars
-│   ├── browse.jsx       # Project catalog with category, status & stake filters
-│   ├── browse/map.jsx   # Dedicated 2D cartography quadrant map page
-│   ├── dashboard.jsx    # User profile, stakes, active claims, & colocated LedgerTable
-│   ├── leaderboard.jsx  # Community preservation rankings table & badges
-│   ├── login.jsx        # Unified Digger authentication (Sign In / Register tabs & GitHub)
-│   ├── signup.jsx       # Lightweight registration alias delegating to unified auth
-│   ├── simulator.jsx    # Interactive cron & timeout execution sandbox
-│   ├── submit.jsx       # Dead repository listing flow
-│   ├── workbench.jsx    # Archivist workbench with specimens & marginalia notes
-│   ├── project/
-│   │   └── [id].jsx     # 4-tab project dossier (Overview, Autopsy, Handover, Provenance)
-│   └── api/
-│       ├── auth/
-│       │   └── [...slug].js  # Unified auth: login, signup, logout, me, personas, switch, & GitHub OAuth
-│       ├── commitments/
-│       │   └── [...slug].js  # Consolidated claims (submit, withdraw, verify, milestones)
-│       ├── projects/
-│       │   ├── index.js      # List & create projects
-│       │   └── [...slug].js  # Project details, commit, approve, reject, download
-│       ├── users/
-│       │   └── [...slug].js  # User profile & immutable ledger history
-│       ├── cron/
-│       │   └── timeout-check.js # Automated Vercel cron background resolver
-│       └── upload.js         # Multipart file upload handler
-├── prisma/
-│   ├── schema.prisma    # PostgreSQL database schema & models
-│   └── seed.js          # Pre-seeded test personas and dead projects
-├── project-proposal/
-│   ├── PROJECT_PROPOSAL.md  # Project proposal in Markdown
-│   └── PROJECT_PROPOSAL.tex  # Project proposal in LaTeX
-├── scripts/
-│   └── test-all.js      # Master unified test suite (protocol, edge cases, auth)
-├── styles/
-│   └── globals.css      # Hand-drawn ink parchment design system
-├── DEPLOYMENT.md        # Step-by-step Neon PostgreSQL & Vercel guide
-└── vercel.json          # Vercel serverless cron configuration
+```mermaid
+flowchart LR
+    A[GitHub repo] --> B{Legal check}
+    B -- "abandoned + open license" --> C[Open grave]
+    B -- "owner proves it is theirs" --> D[Donated project]
+    B -- "still active or no license" --> X[Refused]
+    C --> E[Autopsy + revival score]
+    D --> E
+    E --> F[People claim or join]
+    F --> G[Fork on GitHub and commit]
+    G --> H{Fork verification}
+    H -- "real fork with new commits" --> I[✨ Revived]
+    H -- "not a fork / no new commits" --> F
 ```
 
+### 1. Only legally revivable code is listed
+A repo becomes an **open grave** only if both are true:
+- **It is abandoned:** archived by its owner, or no code pushed for 12+ months.
+- **Its license already allows forking:** MIT, Apache-2.0, BSD, ISC, MPL, GPL, LGPL, AGPL, Unlicense, CC0 and similar.
+
+Because the license already gives everyone permission to copy and modify the code, nobody needs to ask the owner. The original author is credited on every page, and the original repository is never touched or hosted here. Repos with no license are refused, since by default nobody may reuse them. Anything else can only be listed by its owner, as a **donated project**, after they prove ownership by linking their GitHub account.
+
+### 2. Every grave gets an autopsy
+Built from the repo's real commit history, contributor stats and issues:
+- **Peak activity:** the busiest year and its commit count.
+- **Cause of decline:** Maintainer Departure, Solo Maintainer Burnout, Overwhelmed by Issues, Abrupt Stop, Gradual Fade-out, Low Adoption or Stalled Development.
+- **Revival path:** where the next person should start.
+
+### 3. Revival score (0 – 100)
+
+| Factor | Weight | What it measures |
+|---|---|---|
+| Freshness | 25 | How recently it died (linear over 8 years) |
+| Documentation | 20 | README length and quality |
+| Maintenance | 20 | Share of issues that were closed |
+| Community | 20 | Contributors and pull requests (log scale) |
+| Adoption | 15 | Stars and forks (log scale) |
+
+Difficulty: **≥ 75 Easy**, **≥ 50 Medium**, otherwise **Hard**.
+
+### 4. Community revivals
+- Anyone can claim an open grave, and **many people can join the same one**. There is no stake and no gatekeeper.
+- The **first verified fork becomes the community fork** that everyone else sends pull requests to.
+- Leaving is free. Claims with no activity lapse after 14 days with no penalty.
+
+### 5. Git is the proof of work
+A revival only counts when the server confirms, through the GitHub API, that:
+- The submitted repo is a **real fork** of the original.
+- It has **new commits made after the claim**.
+- If the reviver linked GitHub, **at least one of those commits is theirs**.
+
+Verified revivers earn 100 credits and reputation.
+
+### 6. Anyone can grow the catalogue
+The **🔎 Suggest a Dead Repo** box on the Submit page takes one GitHub link, runs the same legal check, and lists the repo with its autopsy in about 10–30 seconds if it passes.
+
+### Donated projects
+Owners can also hand over their own projects, including ones that are not open source. These use a credit **stake** held in escrow so builders can't ghost. The owner has 7 days to review a submission, and an append-only ledger records every credit movement.
+
 ---
 
-## 🚀 Quick Start
+## Where the data comes from
 
-### 1. Configure Environment Variables
-Create `.env` based on `.env.example`:
-```env
-DATABASE_URL="postgresql://user:password@ep-host.aws.neon.tech/neondb?sslmode=require"
-SESSION_SECRET="your-super-secret-key"
-CRON_SECRET="your-cron-secret"
-NEXT_PUBLIC_APP_NAME="Digital Graveyard"
-GITHUB_TOKEN="github_pat_your_read_only_token"
+Every grave, score and autopsy comes from **GitHub's public API**. The starting catalogue was built by [`scripts/seed-open-graves.mjs`](scripts/seed-open-graves.mjs), which searches GitHub for repos that are archived, popular (100–500+ stars depending on category), untouched since before 2023, and under an open license, across categories like Web, AI/ML, Mobile, Games, Security and DevTools. New graves are added by users through the suggest box.
+
+The only made-up data is a handful of **demo accounts** (`@campus.edu` emails) used for presenting.
+
+---
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | Next.js 14 (pages router), React 18 |
+| API | Next.js API routes + a GraphQL endpoint (GraphQL Yoga) at `/api/graphql` |
+| Database | PostgreSQL on [Neon](https://neon.tech), via Prisma 5 |
+| Data source | GitHub GraphQL + REST APIs (commits, contributor stats, license, forks, compare) |
+| Auth | Email + bcrypt passwords, optional GitHub OAuth, HMAC-signed `HttpOnly` session cookie |
+| Hosting | Vercel, with a daily cron job that expires stale claims |
+
+### Security notes
+- Users are shown to each other only by random aliases like `Digger-1042`; emails and GitHub identities stay private.
+- The legal check, fork verification and every credit movement run on the server, so the browser can't skip them.
+- The cron endpoint requires `CRON_SECRET`.
+- Demo persona switching only works for demo accounts.
+
+---
+
+## Project structure
+
+```
+components/   UI: project cards, autopsy chart, revival checklist, navbar, provenance timeline
+context/      AppContext: signed-in user, projects, API calls
+lib/
+  githubIntelligence.js   GitHub analysis, revival score, open-license list
+  listing.js              legal check: abandoned + open license, or owner
+  revivers.js             community revival status and crew
+  mockFallback.js         autopsy diagnosis (diagnoseDecline) and project enrichment
+  ledger.js               append-only credit ledger
+  auth.js                 sessions, password hashing
+  graphql/                GraphQL schema and resolvers
+pages/
+  index, browse, project/[id], submit, dashboard, about (Manifesto), login, signup
+  api/
+    projects/             list, create, suggest, claim
+    commitments/          submit fork, withdraw, review
+    auth/                 login, signup, GitHub OAuth, demo personas
+    cron/timeout-check    daily expiry of stale claims
+prisma/schema.prisma      User, Project, Commitment, Milestone, LedgerEntry
+scripts/                  local database, seeding, tests, Vercel DB setup
+docs/demo-script.html     class demo walkthrough and pitch
 ```
 
-### 2. Install & Push Database Schema
+---
+
+## Running it locally
+
+Requires **Node.js 18+**. No database install needed: the project ships an embedded PostgreSQL.
+
 ```bash
+git clone https://github.com/Harshita445/digital_graveyard_swe.git
+cd digital_graveyard_swe
 npm install
-npm run prisma:push
+cp .env.example .env
+```
+
+Start the local database and the dev server together:
+
+```bash
+npm run dev:local
+```
+
+Open http://localhost:3000. The local database lives in `.pgdata/` and runs on port 5433.
+
+In a second terminal, fill it with demo accounts and real graves:
+
+```bash
 npm run seed
 ```
 
-### GitHub Repository Intelligence
-
-Projects may include a public GitHub repository URL. The project owner can select **Analyze Repository** from the project dossier. The first analysis is also attempted during project creation when `GITHUB_TOKEN` is configured. The analyzer uses GitHub GraphQL to store repository metadata, calculate a 0-100 revival score, classify repository health, generate an autopsy report, and identify the peak activity month.
-
-Previously analyzed repositories are refreshed once every 24 hours by `/api/cron/timeout-check`. The score is generated from live GitHub repository metadata and refreshed automatically through the scheduled ingestion pipeline.
-
-### 3. Start Development Server
 ```bash
-npm run dev
+GITHUB_TOKEN=$(gh auth token) npm run seed:graves
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### 4. Run Test Suite
-```bash
-npm test
-```
+> ⚠️ `npm run seed` **wipes every table** before seeding. Only run it against your local database, never production.
+
+### Environment variables
+
+See [`.env.example`](.env.example). The important ones:
+
+| Variable | Needed for |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `GITHUB_TOKEN` | Repo analysis, the suggest box and fork verification |
+| `SESSION_SECRET` | Signing session cookies |
+| `CRON_SECRET` | Protecting the daily cron endpoint |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Optional "Connect GitHub" sign-in |
+| `NEXT_PUBLIC_BASE_URL` | OAuth callback base URL |
+
+### Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev:local` | Embedded Postgres + Next.js dev server |
+| `npm run dev` | Dev server against `DATABASE_URL` |
+| `npm run build` | Applies the schema safely (no data loss), then builds |
+| `npm run seed` | Demo accounts (local only, wipes data) |
+| `npm run seed:graves` | Adds real abandoned repos from GitHub (additive) |
+| `npm test` | End-to-end API test suite against a running server |
+| `npm run lint` | ESLint |
 
 ---
 
-## 📋 Deterministic Penalty Matrix
+## Deployment
 
-| Event | Stake Collateral | Reputation Impact | Strike Count | Codebase State |
-|---|---|---|---|---|
-| **Taker ghosts (>14d inactive)** | Forfeited $\rightarrow$ Owner | Taker −20 | Taker +1 | Relisted as `LISTED` |
-| **Owner ghosts (no review, >7d)** | Taker refunded + 100 cr reward | Owner −10 | Owner +1 | Marked `COMPLETED` |
-| **Taker cancels pre-approval** | Unlocked | Taker −2 | — | Relisted as `LISTED` |
-| **Owner cancels post-approval** | Full refund $\rightarrow$ Taker | Owner −5 | — | Relisted as `LISTED` |
-| **Milestone missed (1st/2nd)** | Locked in escrow | Taker −5 | — | Remains `ACTIVE` |
-| **Milestone missed (3rd/critical)**| Forfeited $\rightarrow$ Owner | Taker −20 | Taker +1 | Relisted as `LISTED` |
-| **Bad-faith / Plagiarism flagged** | Forfeited $\rightarrow$ Owner | Taker −15 | — | Relisted as `LISTED` |
-| **Ghost Strikes $\ge$ 3** | — | — | $\ge$ 3 | Account Suspended |
+The live site runs on **Vercel** with a **Neon** Postgres database.
+
+1. Import the repo into Vercel and attach a Neon database (Vercel → Storage). This sets `DATABASE_URL`.
+2. Add `GITHUB_TOKEN`, `SESSION_SECRET` and `CRON_SECRET` in Project Settings → Environment Variables.
+3. Deploy. `npm run build` runs [`scripts/vercel-db-setup.mjs`](scripts/vercel-db-setup.mjs), which applies the Prisma schema with `db push` and refuses any change that would lose data.
+4. [`vercel.json`](vercel.json) schedules `/api/cron/timeout-check` daily.
+
+Every push to `main` deploys automatically.
 
 ---
 
-## 🚢 Deployment to Vercel
+## Demo
 
-Refer to [`DEPLOYMENT.md`](file:///d:/GRAVFIN/DEPLOYMENT.md) for full production deployment instructions on Vercel with Neon PostgreSQL.
+A step-by-step class demo with the pitch, two people reviving one grave side by side, and likely questions is in [`docs/demo-script.html`](docs/demo-script.html).
+
+---
+
+## Course context
+
+Built as a Software Engineering course project. Progress and test reports from earlier milestones (when the project was called *Gravefin*) are the PDFs in the repo root, and the original proposal is in [`project-proposal/`](project-proposal/).
