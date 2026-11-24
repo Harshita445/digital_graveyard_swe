@@ -17,7 +17,8 @@
     "generate:pdf": "node scripts/generate-pdf.js",
     "db:local": "node scripts/local-db.mjs",
     "dev:local": "node scripts/local-db.mjs --dev",
-    "seed:graves": "node scripts/seed-open-graves.mjs"
+    "seed:graves": "node scripts/seed-open-graves.mjs",
+    "test:security": "node scripts/test-graphql-security.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
