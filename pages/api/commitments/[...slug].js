@@ -74,7 +74,13 @@ async function handleSubmit(req, res, id) {
     // Open graves are verified by git itself: the deliverable must be a fork of the
     // original with new commits made after the claim. No human reviewer needed.
     if (commitment.project.source === 'OPEN_GRAVE') {
-      const check = await verifyRevivalFork(commitment.project.githubRepoUrl, deliverableUrl, commitment.committedAt);
+      let check;
+      try {
+        check = await verifyRevivalFork(commitment.project.githubRepoUrl, deliverableUrl, commitment.committedAt);
+      } catch (githubError) {
+        console.error('Fork verification could not reach GitHub:', githubError.message);
+        return res.status(502).json({ error: 'Could not reach GitHub to verify your fork. Please try again in a minute.' });
+      }
       if (!check.ok) return res.status(400).json({ error: check.reason });
 
       // Several people may submit the same community fork, so when the reviver has linked
