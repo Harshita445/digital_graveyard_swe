@@ -384,25 +384,6 @@ export default function Navbar() {
               >
                 Sign In
               </Link>
-              <Link
-                href="/signup"
-                className="sketch-btn"
-                style={{
-                  height: 35,
-                  padding: '0 12px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  fontSize: 12,
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: 700,
-                  textDecoration: 'none',
-                  borderRadius: 8,
-                  backgroundColor: 'var(--color-ink)',
-                  color: '#FAF6EE'
-                }}
-              >
-                Register
-              </Link>
             </div>
           )}
 

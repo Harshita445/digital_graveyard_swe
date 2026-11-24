@@ -165,10 +165,7 @@ export default function SubmitProject() {
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             <Link href="/login" className="btn btn-primary btn-block" style={{ height: 42, borderRadius: '10px', fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              Log In with Email →
-            </Link>
-            <Link href="/signup" className="btn btn-secondary btn-block" style={{ height: 42, borderRadius: '10px', fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              Create Anonymous Account
+              Continue with GitHub →
             </Link>
           </div>
         </div>

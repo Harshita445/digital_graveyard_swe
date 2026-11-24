@@ -6,20 +6,9 @@ import Icon from '../components/Icons';
 
 export default function Login({ initialMode = 'login' }) {
   const router = useRouter();
-  const { login, signup, addToast, currentUser, loading: authLoading } = useApp();
+  const { currentUser, loading: authLoading } = useApp();
   const [providers, setProviders] = useState({ github: true, devSimulation: false });
-  const [mode, setMode] = useState(initialMode);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
-  React.useEffect(() => {
-    if (router.query.mode === 'signup' || router.query.tab === 'signup') {
-      setMode('signup');
-    }
-  }, [router.query]);
 
   // Learn which sign-in options are actually configured on this deployment.
   React.useEffect(() => {
@@ -42,50 +31,17 @@ export default function Login({ initialMode = 'login' }) {
     const err = router.query.error;
     if (!err) return;
     const messages = {
-      github_not_configured: 'GitHub sign-in is not available right now. Please use email below.',
+      github_not_configured: 'GitHub sign-in is not available right now. Please try again later.',
       state_mismatch: 'Security check failed. Please try signing in with GitHub again.',
       access_denied: 'GitHub authorization was declined.',
       account_banned: 'This account is suspended due to protocol violations.',
       invalid_oauth_request: 'The GitHub sign-in request was incomplete. Please try again.',
       token_exchange_failed: 'GitHub did not accept the sign-in. Please try again.',
       profile_fetch_failed: 'Could not read your GitHub profile. Please try again.',
-      oauth_internal_error: 'Something went wrong signing in with GitHub. Please try again or use email.'
+      oauth_internal_error: 'Something went wrong signing in with GitHub. Please try again.'
     };
     setErrorMsg(messages[err] || 'Sign-in failed. Please try again.');
   }, [router.query.error]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    if (mode === 'signup') {
-      if (password !== confirmPassword) {
-        setErrorMsg('Passwords do not match');
-        addToast('Passwords do not match', 'error');
-        return;
-      }
-      if (password.length < 6) {
-        setErrorMsg('Password must be at least 6 characters');
-        addToast('Password must be at least 6 characters', 'error');
-        return;
-      }
-    }
-
-    try {
-      setLoading(true);
-      if (mode === 'signup') {
-        await signup(email, password);
-      } else {
-        await login(email, password);
-      }
-      router.push('/dashboard');
-    } catch (err) {
-      setErrorMsg(err.message || (mode === 'signup' ? 'Registration failed' : 'Authentication failed'));
-      addToast(err.message || (mode === 'signup' ? 'Registration failed' : 'Authentication failed'), 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="container" style={{ padding: '50px 0 80px', maxWidth: 460 }}>
@@ -94,12 +50,10 @@ export default function Login({ initialMode = 'login' }) {
           <Icon name="tombstone" size={22} />
         </div>
         <h1 className="font-display" style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', letterSpacing: '-0.03em' }}>
-          {mode === 'signup' ? 'Create Anonymous Account' : 'Authenticate to Graveyard'}
+          Authenticate to Graveyard
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: 0 }}>
-          {mode === 'signup'
-            ? 'You will automatically be issued a unique Digger alias and 500 starter escrow credits.'
-            : 'Your real email is private. You will interact solely under your assigned Digger alias.'}
+          Sign in with GitHub. Your real email stays private. New accounts are issued a unique Digger alias and 500 starter escrow credits.
         </p>
       </div>
 
@@ -150,44 +104,6 @@ export default function Login({ initialMode = 'login' }) {
           boxShadow: '3px 4px 0px #141414'
         }}
       >
-        {/* Mode Selector Tabs */}
-        <div style={{ display: 'flex', gap: 6, background: '#FAF8F4', padding: 4, borderRadius: 10, border: '1.5px solid var(--border)' }}>
-          <button
-            type="button"
-            onClick={() => setMode('login')}
-            className="btn-sketch-sm"
-            style={{
-              flex: 1,
-              padding: '7px 0',
-              textAlign: 'center',
-              background: mode === 'login' ? 'var(--accent)' : 'transparent',
-              color: mode === 'login' ? '#FFFFFF' : 'var(--text)',
-              border: mode === 'login' ? '1.5px solid var(--border)' : 'none',
-              fontWeight: 800,
-              cursor: 'pointer'
-            }}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('signup')}
-            className="btn-sketch-sm"
-            style={{
-              flex: 1,
-              padding: '7px 0',
-              textAlign: 'center',
-              background: mode === 'signup' ? 'var(--accent)' : 'transparent',
-              color: mode === 'signup' ? '#FFFFFF' : 'var(--text)',
-              border: mode === 'signup' ? '1.5px solid var(--border)' : 'none',
-              fontWeight: 800,
-              cursor: 'pointer'
-            }}
-          >
-            Create Account (+500 cr)
-          </button>
-        </div>
-
         {/* GitHub OAuth Button */}
         <a
           href={providers.github ? '/api/auth/github' : undefined}
@@ -215,77 +131,6 @@ export default function Login({ initialMode = 'login' }) {
           <Icon name="github" size={20} />
           <span>Continue with GitHub</span>
         </a>
-
-        <div style={{ display: 'flex', alignItems: 'center', margin: '2px 0', gap: 12 }}>
-          <div style={{ flex: 1, height: 1.5, background: 'rgba(20, 20, 20, 0.15)' }} />
-          <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-dim)', letterSpacing: '0.08em' }}>
-            Or with Email
-          </span>
-          <div style={{ flex: 1, height: 1.5, background: 'rgba(20, 20, 20, 0.15)' }} />
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-        >
-          <div>
-            <label className="label">Account Email</label>
-            <input
-              type="email"
-              className="input"
-              style={{ height: 42, borderRadius: '10px' }}
-              placeholder="digger@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="label">Password</label>
-            <input
-              type="password"
-              className="input"
-              style={{ height: 42, borderRadius: '10px' }}
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {mode === 'signup' && (
-            <div>
-              <label className="label">Confirm Password</label>
-              <input
-                type="password"
-                className="input"
-                style={{ height: 42, borderRadius: '10px' }}
-                placeholder="••••••••"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                required
-              />
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            style={{ marginTop: 4, height: 42, fontSize: 14.5, borderRadius: '10px' }}
-            disabled={loading}
-          >
-            {loading ? 'Processing...' : (mode === 'signup' ? 'Create Account & Claim 500 Credits →' : 'Log In with Email →')}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-          {mode === 'signup' ? (
-            <span>Already have an account? <button type="button" onClick={() => setMode('login')} style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Sign In</button></span>
-          ) : (
-            <span>Don&apos;t have an account? <button type="button" onClick={() => setMode('signup')} style={{ background: 'none', border: 'none', color: 'var(--text)', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>Create anonymous account</button></span>
-          )}
-        </div>
       </div>
     </div>
   );
