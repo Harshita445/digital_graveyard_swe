@@ -6,7 +6,8 @@ import Icon from '../components/Icons';
 
 export default function Login({ initialMode = 'login' }) {
   const router = useRouter();
-  const { login, signup, addToast } = useApp();
+  const { login, signup, addToast, currentUser, loading: authLoading } = useApp();
+  const [providers, setProviders] = useState({ github: true, devSimulation: false });
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,21 +21,37 @@ export default function Login({ initialMode = 'login' }) {
     }
   }, [router.query]);
 
+  // Learn which sign-in options are actually configured on this deployment.
   React.useEffect(() => {
-    if (router.query.error) {
-      const err = router.query.error;
-      if (err === 'github_not_configured') {
-        setErrorMsg('GitHub OAuth credentials (GITHUB_CLIENT_ID & GITHUB_CLIENT_SECRET) are not configured in .env yet.');
-      } else if (err === 'state_mismatch') {
-        setErrorMsg('Security check failed: OAuth state mismatch. Please retry.');
-      } else if (err === 'access_denied') {
-        setErrorMsg('GitHub authorization was declined by user.');
-      } else if (err === 'account_banned') {
-        setErrorMsg('This account is suspended due to protocol violations.');
-      } else {
-        setErrorMsg(`GitHub OAuth error: ${err}`);
-      }
+    let cancelled = false;
+    fetch('/api/auth/providers')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (data && !cancelled) setProviders(data); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Already signed in? Skip the form.
+  React.useEffect(() => {
+    if (!authLoading && currentUser && !router.query.error) {
+      router.replace('/dashboard');
     }
+  }, [authLoading, currentUser, router]);
+
+  React.useEffect(() => {
+    const err = router.query.error;
+    if (!err) return;
+    const messages = {
+      github_not_configured: 'GitHub sign-in is not available right now. Please use email below.',
+      state_mismatch: 'Security check failed. Please try signing in with GitHub again.',
+      access_denied: 'GitHub authorization was declined.',
+      account_banned: 'This account is suspended due to protocol violations.',
+      invalid_oauth_request: 'The GitHub sign-in request was incomplete. Please try again.',
+      token_exchange_failed: 'GitHub did not accept the sign-in. Please try again.',
+      profile_fetch_failed: 'Could not read your GitHub profile. Please try again.',
+      oauth_internal_error: 'Something went wrong signing in with GitHub. Please try again or use email.'
+    };
+    setErrorMsg(messages[err] || 'Sign-in failed. Please try again.');
   }, [router.query.error]);
 
   const handleSubmit = async (e) => {
@@ -107,7 +124,7 @@ export default function Login({ initialMode = 'login' }) {
             <Icon name="alertTriangle" size={16} />
             <span>{errorMsg}</span>
           </div>
-          {router.query.error === 'github_not_configured' && (
+          {router.query.error === 'github_not_configured' && providers.devSimulation && (
             <div style={{ marginTop: 4, fontSize: 12 }}>
               <Link
                 href="/api/auth/github?dev=true"
@@ -173,7 +190,9 @@ export default function Login({ initialMode = 'login' }) {
 
         {/* GitHub OAuth Button */}
         <a
-          href="/api/auth/github"
+          href={providers.github ? '/api/auth/github' : undefined}
+          aria-disabled={!providers.github}
+          title={providers.github ? undefined : 'GitHub sign-in is not configured'}
           className="btn btn-block"
           style={{
             height: 44,
@@ -189,7 +208,8 @@ export default function Login({ initialMode = 'login' }) {
             boxShadow: '2px 2.5px 0px #141414',
             textDecoration: 'none',
             fontWeight: 700,
-            cursor: 'pointer'
+            cursor: providers.github ? 'pointer' : 'not-allowed',
+            opacity: providers.github ? 1 : 0.45
           }}
         >
           <Icon name="github" size={20} />
