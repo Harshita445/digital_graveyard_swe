@@ -37,6 +37,8 @@ export default async function handler(req, res) {
       return handlePersonas(req, res);
     case 'switch-persona':
       return handleSwitchPersona(req, res);
+    case 'providers':
+      return handleProviders(req, res);
     case 'github':
       if (pathParts.length > 1 && pathParts[1] === 'callback') {
         return handleGitHubCallback(req, res);
@@ -267,18 +269,36 @@ async function handleSwitchPersona(req, res) {
   }
 }
 
-// 7. GET /api/auth/github (Initiate OAuth)
-async function handleGitHubInit(req, res) {
-  const clientId = process.env.GITHUB_CLIENT_ID;
-  const cleanClientId = (clientId || '').replace(/^["']|["']$/g, '').trim();
+// Strip stray quotes/whitespace that often sneak into env vars pasted into dashboards.
+function cleanEnv(value) {
+  return (value || '').replace(/^["']|["']$/g, '').trim();
+}
 
+// Single source of truth for the OAuth redirect URI, so the authorize and
+// token-exchange steps always send the exact same value (GitHub requires it).
+function getBaseUrl(req) {
   const proto = req.headers['x-forwarded-proto'] || (req.headers.host?.includes('localhost') ? 'http' : 'https');
   const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
-  const configuredBaseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
-  const baseUrl = configuredBaseUrl && !(process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/.test(configuredBaseUrl))
-    ? configuredBaseUrl
-    : `${proto}://${host}`;
-  const redirectUri = `${baseUrl}/api/auth/github/callback`;
+  const configured = cleanEnv(process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL).replace(/\/+$/, '');
+  if (configured && !(process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/.test(configured))) {
+    return configured;
+  }
+  return `${proto}://${host}`;
+}
+
+// GET /api/auth/providers - tells the login page which sign-in options are live.
+async function handleProviders(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).json({
+    github: Boolean(cleanEnv(process.env.GITHUB_CLIENT_ID) && cleanEnv(process.env.GITHUB_CLIENT_SECRET)),
+    devSimulation: process.env.NODE_ENV !== 'production'
+  });
+}
+
+// 7. GET /api/auth/github (Initiate OAuth)
+async function handleGitHubInit(req, res) {
+  const cleanClientId = cleanEnv(process.env.GITHUB_CLIENT_ID);
+  const redirectUri = `${getBaseUrl(req)}/api/auth/github/callback`;
 
   const state = crypto.randomBytes(16).toString('hex');
   const isProd = process.env.NODE_ENV === 'production';
@@ -354,21 +374,15 @@ async function handleGitHubCallback(req, res) {
       };
       userEmail = `${ghUser.login}@graveyard.local`;
     } else {
-      const clientId = process.env.GITHUB_CLIENT_ID;
-      const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+      const clientId = cleanEnv(process.env.GITHUB_CLIENT_ID);
+      const clientSecret = cleanEnv(process.env.GITHUB_CLIENT_SECRET);
 
       if (!clientId || !clientSecret) {
         res.setHeader('Set-Cookie', clearStateCookie);
         return res.redirect(302, '/login?error=github_not_configured');
       }
 
-      const proto = req.headers['x-forwarded-proto'] || (req.headers.host?.includes('localhost') ? 'http' : 'https');
-      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
-      const configuredBaseUrl = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
-      const baseUrl = configuredBaseUrl && !(process.env.NODE_ENV === 'production' && /localhost|127\.0\.0\.1/.test(configuredBaseUrl))
-        ? configuredBaseUrl
-        : `${proto}://${host}`;
-      const redirectUri = `${baseUrl}/api/auth/github/callback`;
+      const redirectUri = `${getBaseUrl(req)}/api/auth/github/callback`;
 
       const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
