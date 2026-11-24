@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { CheckCircle2, Circle, Award, Sprout, TreeDeciduous, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { PLEDGE, PROOF_DAYS, MIN_NEW_COMMITS, REVIVE_REWARD } from '../lib/claimRules';
 
 const fmt = d => (d ? new Date(d).toLocaleDateString() : null);
 
@@ -26,14 +27,14 @@ function openGraveSteps(project, revivers) {
       title: 'Claimed by revivers',
       description: first
         ? `${crew} ${names.length === 1 ? 'has' : 'have'} joined. It is a community project, so anyone else can join too.`
-        : 'Free to claim, and more people can join later. Claiming tells everyone you are working on it for the next 14 days.',
+        : `Anyone can claim it with a ${PLEDGE}-credit pledge, and more people can join later. Each claimer must show a commit of their own within ${PROOF_DAYS} days.`,
       checkedBy: 'System',
       done: Boolean(first),
       when: first ? fmt(first.joinedAt) : null
     },
     {
       title: 'A fork has new commits made after the claim',
-      description: 'When a reviver submits a fork, GitHub is asked whether it really is a fork of the original and whether it has commits newer than their claim. If they linked GitHub, at least one of those commits must be theirs.',
+      description: `GitHub is asked whether the fork really is a fork of the original, with ${MIN_NEW_COMMITS}+ commits newer than the claim and at least one by the claimer.`,
       checkedBy: 'GitHub',
       done: revived,
       when: firstVerified ? fmt(firstVerified.verifiedAt) : null
@@ -53,12 +54,12 @@ function openGraveSteps(project, revivers) {
 
 function donatedSteps(project, commitment) {
   const s = project.status;
-  const approved = ['ACTIVE', 'SUBMITTED', 'COMPLETED'].includes(s);
-  let approvalText = 'Waiting for a builder to claim it.';
+  const approved = ['ACTIVE', 'COMPLETED'].includes(s);
+  let approvalText = `Waiting for someone to request it (with a ${PLEDGE}-credit pledge).`;
   if (approved) {
-    approvalText = `${commitment?.taker?.alias || 'The builder'} was approved and ${commitment?.stakeLocked ?? project.stakeRequired} credits are locked until the work is accepted.`;
+    approvalText = `${commitment?.taker?.alias || 'The builder'} was approved. Their ${commitment?.stakeLocked || PLEDGE}-credit pledge comes back when they finish or quit.`;
   } else if (s === 'PENDING_APPROVAL') {
-    approvalText = 'A builder has asked to take this on and is waiting for the owner to approve.';
+    approvalText = 'Someone has requested it. The owner has 3 days to approve or decline, or the request expires.';
   }
   return [
     {
@@ -69,25 +70,26 @@ function donatedSteps(project, commitment) {
       when: fmt(project.createdAt)
     },
     {
-      title: 'Builder approved and stake locked',
+      title: 'Builder approved',
       description: approvalText,
       checkedBy: 'Owner',
       done: approved,
       when: approved ? fmt(commitment?.approvedAt) : null
     },
     {
-      title: 'Work submitted',
-      description: 'The builder submits a link to the finished work. If nothing arrives within 14 days, the stake goes to the owner.',
-      checkedBy: 'Builder',
-      done: ['SUBMITTED', 'COMPLETED'].includes(s),
-      when: fmt(commitment?.submittedAt)
+      title: `First own commit within ${PROOF_DAYS} days`,
+      description: 'Checked on GitHub every day. No commit and no quit means the claim is released and the pledge goes to the bounty.',
+      checkedBy: 'GitHub',
+      done: s === 'COMPLETED' || Boolean(commitment?.proofAt),
+      when: fmt(commitment?.proofAt)
     },
     {
-      title: 'Accepted and stake released',
-      description: 'The owner approves the work, or it is approved automatically after 7 days of silence. The stake is returned plus a 100-credit reward.',
-      checkedBy: 'Owner or 7-day timer',
+      title: 'Revived',
+      description: `The fork reaches ${MIN_NEW_COMMITS}+ new commits before the deadline. The pledge comes back with a ${REVIVE_REWARD}-credit reward. GitHub decides, not the owner.`,
+      checkedBy: 'GitHub',
       done: s === 'COMPLETED',
-      when: s === 'COMPLETED' ? fmt(commitment?.resolvedAt) : null
+      when: s === 'COMPLETED' ? fmt(commitment?.resolvedAt) : null,
+      link: s === 'COMPLETED' ? project.revivedRepoUrl : null
     }
   ];
 }
@@ -98,7 +100,7 @@ export default function HandoverChecklist({ project, commitment, revivers = [] }
   const isCompleted = project?.status === 'COMPLETED';
   let growthStage = 'tombstone';
   if (isCompleted) growthStage = 'tree';
-  else if (['ACTIVE', 'SUBMITTED'].includes(project?.status)) growthStage = 'sapling';
+  else if (project?.status === 'ACTIVE') growthStage = 'sapling';
 
   // Celebrate once when a completed revival is shown.
   const celebrated = useRef(false);
@@ -192,104 +194,3 @@ export default function HandoverChecklist({ project, commitment, revivers = [] }
     </div>
   );
 }
-
-export function MilestoneTracker({ commitmentId, milestones = [], isTaker = false, onMilestoneUpdated }) {
-  const { addToast } = useApp();
-  const [updating, setUpdating] = useState(null);
-
-  const markComplete = async (mid) => {
-    try {
-      setUpdating(mid);
-      const res = await fetch(`/api/commitments/${commitmentId}/milestones/${mid}/complete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update milestone');
-
-      addToast(data.message || 'Milestone marked as MET', 'success');
-      if (onMilestoneUpdated) onMilestoneUpdated();
-    } catch (err) {
-      addToast(err.message, 'error');
-    } finally {
-      setUpdating(null);
-    }
-  };
-
-  if (!milestones || milestones.length === 0) {
-    return (
-      <div style={{ padding: '14px 18px', background: '#FFFFFF', border: '1.5px dashed var(--border-soft)', borderRadius: 10, fontSize: 13, color: 'var(--text-dim)' }}>
-        No milestone checkpoints defined for this commitment.
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {milestones.map((m, idx) => {
-        const isMet = m.status === 'MET';
-        const isMissed = m.status === 'MISSED';
-        const isPending = m.status === 'PENDING';
-
-        return (
-          <div
-            key={m.id}
-            style={{
-              padding: '14px 18px',
-              background: '#FFFFFF',
-              border: '2px solid var(--border)',
-              borderRadius: '10px',
-              boxShadow: '1.5px 2px 0px #141414',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 12
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: '6px',
-                  border: '1.8px solid var(--border)',
-                  background: isMet ? '#EAF5ED' : isMissed ? '#FDE8E8' : '#FAF8F4',
-                  color: isMet ? 'var(--success)' : isMissed ? 'var(--error)' : 'var(--text)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 13,
-                  fontWeight: 800
-                }}
-              >
-                {isMet ? '✓' : idx + 1}
-              </span>
-
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>
-                  {m.title}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>
-                  Due: {new Date(m.dueAt).toLocaleDateString()} · Status: <span style={{ fontWeight: 700, color: isMet ? 'var(--success)' : isMissed ? 'var(--error)' : 'var(--text)' }}>{m.status}</span>
-                  {m.missCount > 0 && ` (${m.missCount} missed warnings)`}
-                </div>
-              </div>
-            </div>
-
-            {isTaker && isPending && (
-              <button
-                className="btn-sketch btn-sketch-sm"
-                onClick={() => markComplete(m.id)}
-                disabled={updating === m.id}
-              >
-                {updating === m.id ? 'Updating...' : 'Mark as MET ✓'}
-              </button>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-

@@ -3,23 +3,26 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useApp } from '../context/AppContext';
 import Icon from '../components/Icons';
-import { GitBranch, Code2 } from 'lucide-react';
-import { getLocalProjects, saveLocalProjects, CATEGORIES, STATIC_DEMO } from '../lib/mockFallback';
+import { GitBranch } from 'lucide-react';
+import { CATEGORIES } from '../lib/mockFallback';
+import { PLEDGE, PROOF_DAYS, MIN_NEW_COMMITS, CLAIM_DAY_OPTIONS, DEFAULT_CLAIM_DAYS, TIME_ESTIMATES } from '../lib/claimRules';
 
 export default function SubmitProject() {
   const router = useRouter();
   const { currentUser, addToast } = useApp();
 
+  const [gitRepoUrl, setGitRepoUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [doneWhen, setDoneWhen] = useState('');
+  const [starterTasks, setStarterTasks] = useState('');
+  const [timeEstimate, setTimeEstimate] = useState('WEEKS');
+  const [claimDays, setClaimDays] = useState(DEFAULT_CLAIM_DAYS);
   const [category, setCategory] = useState('Web');
+  const [techTags, setTechTags] = useState('');
   const [completion, setCompletion] = useState(30);
-  const [techTags, setTechTags] = useState('React, Node.js, SQLite');
-  const [stakeRequired, setStakeRequired] = useState(100);
-  const [gitRepoUrl, setGitRepoUrl] = useState('');
-  const [gitBranch, setGitBranch] = useState('main');
-  const [milestoneMode, setMilestoneMode] = useState(false);
   const [handoffNote, setHandoffNote] = useState('');
+  const [ownerAvailable, setOwnerAvailable] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [suggestUrl, setSuggestUrl] = useState('');
   const [suggesting, setSuggesting] = useState(false);
@@ -54,97 +57,40 @@ export default function SubmitProject() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!currentUser) {
-      addToast('Please select or log in to a persona to submit a project', 'error');
+      addToast('Please sign in to list a project', 'error');
       return;
     }
-    if (currentUser.banned) {
-      addToast('Account restricted due to 3 ghost strikes. Project submission blocked.', 'error');
-      return;
-    }
-    if (!title.trim() || !description.trim()) {
-      addToast('Title and description are required', 'error');
-      return;
-    }
-    if (!gitRepoUrl.trim()) {
-      addToast('Git repository URL is required', 'error');
-      return;
-    }
-
+    setSubmitting(true);
     try {
-      setSubmitting(true);
-      const tagsArray = techTags.split(',').map(s => s.trim()).filter(Boolean);
-      const cleanGitUrl = gitRepoUrl.trim();
-      const repoSlug = cleanGitUrl.split('/').filter(Boolean).pop()?.replace('.git', '') || 'repository';
-      const cleanBranch = gitBranch.trim() || 'main';
-      const packageLabel = `${repoSlug}.git (${cleanBranch})`;
-
-      try {
-        const res = await fetch('/api/projects', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(currentUser ? { 'x-user-id': currentUser.id } : {})
-          },
-          body: JSON.stringify({
-            title: title.trim(),
-            description: description.trim(),
-            category,
-            completion: Number(completion),
-            techTags: JSON.stringify(tagsArray),
-            stakeRequired: Number(stakeRequired),
-            fileName: packageLabel,
-            fileUrl: cleanGitUrl,
-            milestoneMode,
-            githubRepoUrl: cleanGitUrl,
-            handoffNote: handoffNote.trim()
-          })
-        });
-
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.project) {
-          addToast(data.message || 'Project listed in the Graveyard successfully!', 'success');
-          router.push(`/project/${data.project.id}`);
-          return;
-        }
-        if (data?.error) {
-          // The server answered: show its reason (e.g. you don't own this repo) instead of faking success.
-          addToast(data.error, 'error');
-          if (data.projectId) router.push(`/project/${data.projectId}`);
-          return;
-        }
-      } catch (err) {
-        // Network failure only: handled in static demo fallback below
-      }
-
-      if (!STATIC_DEMO) {
-        addToast('Could not reach the server. Check your connection and try again.', 'error');
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          githubRepoUrl: gitRepoUrl.trim(),
+          title: title.trim(),
+          description: description.trim(),
+          doneWhen: doneWhen.trim(),
+          starterTasks: starterTasks.trim(),
+          timeEstimate,
+          claimDays: Number(claimDays),
+          category,
+          techTags: techTags.split(',').map(t => t.trim()).filter(Boolean),
+          completion: Number(completion),
+          handoffNote: handoffNote.trim(),
+          ownerAvailable
+        })
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.project) {
+        addToast(data.message || 'Listed!', 'success');
+        router.push(`/project/${data.project.id}`);
         return;
       }
-      // Demo fallback for a static export build only
-      const newProj = {
-        id: `p-${Date.now()}`,
-        ownerId: currentUser.id,
-        owner: currentUser,
-        title: title.trim(),
-        description: description.trim(),
-        category,
-        completion: Number(completion),
-        techTags: JSON.stringify(tagsArray),
-        stakeRequired: Number(stakeRequired),
-        fileName: packageLabel,
-        fileUrl: cleanGitUrl,
-        milestoneMode,
-        githubRepoUrl: cleanGitUrl,
-        status: 'LISTED',
-        createdAt: new Date().toISOString(),
-        commitments: []
-      };
-      const allProjects = getLocalProjects();
-      saveLocalProjects([newProj, ...allProjects]);
-      addToast('Project listed in the Graveyard successfully! (Demo Mode)', 'success');
-      router.push(`/project/${newProj.id}`);
+      // Show the server's reason (not yours to list, missing "done when", etc.).
+      addToast(data?.error || 'That project could not be listed.', 'error');
+      if (data?.projectId) router.push(`/project/${data.projectId}`);
     } catch (err) {
-      addToast(err.message, 'error');
+      addToast('Could not reach the server. Check your connection and try again.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -161,7 +107,7 @@ export default function SubmitProject() {
             Authentication Required
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: '0 0 20px', lineHeight: 1.5 }}>
-            Listing an abandoned repository and configuring an escrow stake requirement requires an active account.
+            Sign in with GitHub to list a repository. That is how we check whether a repo is yours.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
             <Link href="/login" className="btn btn-primary btn-block" style={{ height: 42, borderRadius: '10px', fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -233,210 +179,114 @@ export default function SubmitProject() {
         )}
       </form>
 
-      <h2 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: '0 0 12px' }}>
-        Donating your own project? Use the full form
+      <h2 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: '0 0 6px' }}>
+        Or list it with the full details
       </h2>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '0 0 12px', lineHeight: 1.5 }}>
+        Needed for your own repo, and useful for any grave: claimers see all of this before they pledge.
+      </p>
 
       <form
         onSubmit={handleSubmit}
         className="card"
-        style={{
-          padding: 32,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 22,
-          background: '#FFFFFF',
-          borderRadius: '18px',
-          boxShadow: '3px 4px 0px #141414'
-        }}
+        style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 22, background: '#FFFFFF', borderRadius: '18px', boxShadow: '3px 4px 0px #141414' }}
       >
-        {/* Project Name */}
         <div>
-          <label className="label">Project Title *</label>
-          <input
-            className="input"
-            style={{ height: 42, borderRadius: '10px' }}
-            placeholder="e.g. Adaptive Audio Equalizer"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            required
-          />
-        </div>
-
-        {/* Short & Detailed Description */}
-        <div>
-          <label className="label">Overview & Current State *</label>
-          <textarea
-            className="input"
-            rows={5}
-            style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
-            placeholder="Explain what is currently working, what is broken or missing, and what a taker must build to finish it..."
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            required
-          />
+          <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><GitBranch size={16} /> GitHub repository *</label>
+          <input className="input" style={{ height: 44, borderRadius: '10px' }} placeholder="https://github.com/owner/repository"
+            value={gitRepoUrl} onChange={e => setGitRepoUrl(e.target.value)} required />
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 5 }}>
-            Be specific about missing architecture, untested components, or deployment blockers.
+            Public, and not a fork. Yours → a <em>donated</em> project where you approve who claims it. Someone else&apos;s abandoned, open-licensed repo → an <em>open grave</em> anyone can join.
           </div>
         </div>
 
-        {/* Category & Completion Slider */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+        <div>
+          <label className="label">Title *</label>
+          <input className="input" style={{ height: 42, borderRadius: '10px' }} maxLength={120} placeholder="e.g. Adaptive Audio Equalizer"
+            value={title} onChange={e => setTitle(e.target.value)} required />
+        </div>
+
+        <div>
+          <label className="label">What it is and where it stands *</label>
+          <textarea className="input" rows={4} maxLength={5000} style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
+            placeholder="What works today, what is broken or missing, how to run it."
+            value={description} onChange={e => setDescription(e.target.value)} required />
+        </div>
+
+        <div>
+          <label className="label">Done when… *</label>
+          <textarea className="input" rows={2} maxLength={600} style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
+            placeholder="e.g. It builds on Node 20 and the login bug (issue #12) is fixed."
+            value={doneWhen} onChange={e => setDoneWhen(e.target.value)} required />
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 5 }}>
+            What &quot;revived&quot; means for this project. Claimers aim for this, and GitHub confirms the work ({MIN_NEW_COMMITS}+ new commits on a fork).
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Starter tasks</label>
+          <textarea className="input" rows={3} maxLength={1500} style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
+            placeholder={'One per line, e.g.\nUpdate dependencies\nFix the failing build'}
+            value={starterTasks} onChange={e => setStarterTasks(e.target.value)} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 18 }}>
           <div>
-            <label className="label">Category</label>
-            <select
-              className="input"
-              style={{ height: 42, borderRadius: '10px', cursor: 'pointer' }}
-              value={category}
-              onChange={e => setCategory(e.target.value)}
-            >
-              {CATEGORIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+            <label className="label">Time estimate</label>
+            <select className="input" style={{ height: 42, borderRadius: '10px', cursor: 'pointer' }} value={timeEstimate} onChange={e => setTimeEstimate(e.target.value)}>
+              {Object.entries(TIME_ESTIMATES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+          <div>
+            <label className="label">Claim length</label>
+            <select className="input" style={{ height: 42, borderRadius: '10px', cursor: 'pointer' }} value={claimDays} onChange={e => setClaimDays(Number(e.target.value))}>
+              {CLAIM_DAY_OPTIONS.map(d => <option key={d} value={d}>{d} days</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Category</label>
+            <select className="input" style={{ height: 42, borderRadius: '10px', cursor: 'pointer' }} value={category} onChange={e => setCategory(e.target.value)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
 
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
+          <div>
+            <label className="label">Technologies (comma-separated)</label>
+            <input className="input" style={{ height: 42, borderRadius: '10px' }} placeholder="e.g. Next.js, PostgreSQL"
+              value={techTags} onChange={e => setTechTags(e.target.value)} />
+          </div>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <label className="label" style={{ margin: 0 }}>Starting Completion</label>
-              <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--text)' }}>{completion}%</span>
+              <label className="label" style={{ margin: 0 }}>Rough completion (estimate)</label>
+              <span style={{ fontWeight: 800, fontSize: 13 }}>{completion}%</span>
             </div>
-            <input
-              type="range"
-              min="0"
-              max="95"
-              value={completion}
-              onChange={e => setCompletion(e.target.value)}
-              style={{ width: '100%', marginTop: 8, accentColor: '#141414', cursor: 'pointer' }}
-            />
+            <input type="range" min="0" max="95" value={completion} onChange={e => setCompletion(e.target.value)}
+              style={{ width: '100%', marginTop: 8, accentColor: '#141414', cursor: 'pointer' }} />
           </div>
         </div>
 
-        {/* Technologies */}
         <div>
-          <label className="label">Technologies & Frameworks (comma-separated)</label>
-          <input
-            className="input"
-            style={{ height: 42, borderRadius: '10px' }}
-            placeholder="e.g. Next.js, FastAPI, PostgreSQL, Tailwind"
-            value={techTags}
-            onChange={e => setTechTags(e.target.value)}
-          />
-        </div>
-
-        {/* Git Repository Source (Replaces source code zip file upload) */}
-        <div
-          style={{
-            background: '#FAF8F4',
-            padding: 22,
-            borderRadius: 14,
-            border: '2px solid var(--border)',
-            boxShadow: '2px 2px 0px #141414'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <GitBranch size={18} />
-              <label className="label" style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Git Repository URL *</label>
-            </div>
-          </div>
-
-          <input
-            className="input"
-            style={{ height: 44, borderRadius: '10px' }}
-            placeholder="https://github.com/owner/repository"
-            value={gitRepoUrl}
-            onChange={e => setGitRepoUrl(e.target.value)}
-            required
-          />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 14 }}>
-            <div>
-              <label className="label" style={{ fontSize: 12 }}>Target Branch / Revision</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <GitBranch size={16} color="var(--text-muted)" />
-                <input
-                  className="input"
-                  style={{ height: 38, borderRadius: '8px' }}
-                  placeholder="main"
-                  value={gitBranch}
-                  onChange={e => setGitBranch(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="label" style={{ fontSize: 12 }}>Required Escrow Stake (Credits) *</label>
-              <input
-                type="number"
-                min="20"
-                max="500"
-                className="input"
-                style={{ height: 38, borderRadius: '8px' }}
-                value={stakeRequired}
-                onChange={e => setStakeRequired(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 12, display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.4 }}>
-            <Code2 size={15} style={{ flexShrink: 0, marginTop: 2 }} />
-            <span>
-              Must be a public GitHub repository. The stake only applies to donated projects; open graves are free to claim.
-            </span>
-          </div>
-        </div>
-
-        {/* Handoff letter */}
-        <div>
-          <label className="label">Handoff Letter (if it&apos;s your project)</label>
-          <textarea
-            className="input"
-            rows={4}
-            style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
-            placeholder="Why did you stop? What works, what's half-done, what would you do next? This is the context a reviver can't get from the code."
-            value={handoffNote}
-            onChange={e => setHandoffNote(e.target.value)}
-          />
-        </div>
-
-        {/* Milestone Mode Toggle */}
-        <div
-          className="surface2"
-          style={{
-            padding: 16,
-            borderRadius: '12px',
-            border: '2px solid var(--border)',
-            boxShadow: '1px 2px 0px #141414'
-          }}
-        >
-          <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={milestoneMode}
-              onChange={e => setMilestoneMode(e.target.checked)}
-              style={{ accentColor: '#141414', width: 18, height: 18, cursor: 'pointer' }}
-            />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>
-                Enable Milestone Checkpoints
-              </div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                Splits the blind work phase into 3 phased review targets (M1, M2, M3) with automated checkpoint verification.
-              </div>
-            </div>
+          <label className="label">Handoff letter (if it&apos;s your project)</label>
+          <textarea className="input" rows={4} maxLength={4000} style={{ borderRadius: '12px', padding: '12px 14px', lineHeight: 1.5 }}
+            placeholder="Why did you stop? What's half-done? What would you do next? This is the context a reviver can't get from the code."
+            value={handoffNote} onChange={e => setHandoffNote(e.target.value)} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 13.5, cursor: 'pointer' }}>
+            <input type="checkbox" checked={ownerAvailable} onChange={e => setOwnerAvailable(e.target.checked)}
+              style={{ accentColor: '#141414', width: 17, height: 17 }} />
+            I&apos;m happy to answer questions from whoever claims it (your own repo only)
           </label>
         </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          className="btn btn-primary btn-block"
-          style={{ padding: '14px', fontSize: 15, marginTop: 8, borderRadius: '12px' }}
-          disabled={submitting}
-        >
-          {submitting ? 'Listing in Graveyard...' : 'List Git Repository in Graveyard →'}
+        <div className="surface2" style={{ padding: 14, borderRadius: 12, border: '2px dashed var(--border)', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-muted)' }}>
+          <strong style={{ color: 'var(--text)' }}>How claims work:</strong> claiming pledges {PLEDGE} credits. The claimer must push a commit of their own to a fork within {PROOF_DAYS} days,
+          and finish ({MIN_NEW_COMMITS}+ new commits) within the claim length you chose. Quitting returns the pledge; disappearing sends it to this project&apos;s bounty for the next reviver.
+          On your own repo you approve who gets the claim. You never have to review the code: git does that.
+        </div>
+
+        <button type="submit" className="btn btn-primary btn-block" style={{ padding: '14px', fontSize: 15, marginTop: 4, borderRadius: '12px' }} disabled={submitting}>
+          {submitting ? 'Checking GitHub and listing…' : 'List in the Graveyard →'}
         </button>
       </form>
     </div>

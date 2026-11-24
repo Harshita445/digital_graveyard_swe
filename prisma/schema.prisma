@@ -91,6 +91,14 @@ model Project {
   handoffNote   String?       // owner's "last letter": why it stopped, what is left
   revivedRepoUrl String?      // fork that brought it back, once verified
 
+  // What a claimer needs to know before pledging (see lib/claimRules.js)
+  doneWhen       String?      // what counts as revived, in the lister's words
+  starterTasks   String?      // a few concrete first jobs, one per line
+  timeEstimate   String?      // WEEKEND | WEEKS | MONTH_PLUS
+  claimDays      Int          @default(30) // how long a claim lasts: 14, 30 or 60
+  ownerAvailable Boolean      @default(false) // donated only: owner will answer questions
+  bounty         Int          @default(0)  // pledges lost by people who disappeared; paid to the next reviver
+
   // Relations
   commitments   Commitment[]
 }
@@ -109,6 +117,10 @@ model Commitment {
   submittedAt     DateTime?
   submissionNotes String?
   submissionUrl   String?     // link or file path to deliverable
+  forkUrl          String?   // the fork being checked for progress
+  proofDueAt       DateTime? // first own commit must appear by this time (claim + 7 days)
+  proofAt          DateTime? // when that first commit was seen
+  requestExpiresAt DateTime? // donated only: owner must answer the request by this time
   resolvedAt      DateTime?
 
   // Relations

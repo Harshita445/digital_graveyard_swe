@@ -56,24 +56,32 @@ Built from the repo's real commit history, contributor stats and issues:
 
 Difficulty: **≥ 75 Easy**, **≥ 50 Medium**, otherwise **Hard**.
 
-### 4. Community revivals
-- Anyone can claim an open grave, and **many people can join the same one**. There is no stake and no gatekeeper.
-- The **first verified fork becomes the community fork** that everyone else sends pull requests to.
-- Leaving is free. Claims with no activity lapse after 14 days with no penalty.
+### 4. Claims: a pledge so nobody squats and disappears
+Every claim works the same way, for open graves and donated projects:
+
+| Step | Rule |
+|---|---|
+| Claim | Lock a **150-credit pledge**. You need a linked GitHub account. |
+| Day 7 | GitHub must show **a commit of yours** on a fork of the repo. |
+| Finish | **3+ new commits** on the fork (at least one yours) before the claim ends (14, 30 or 60 days, set by the lister). |
+| Revived | Pledge back **+100 credits** and reputation, plus the project's bounty if it has one. |
+| Quit | Any time. **Full pledge back, no penalty.** |
+| Disappear | Missing day 7 or the deadline without quitting: the pledge goes to the **project's bounty** for the next reviver, −10 reputation and 1 strike. 3 strikes and you can't claim any more. |
+
+- Everyone starts with **500 credits**: enough for 3 claims at once, not a 4th. Credits have no cash value.
+- **Open graves** take any number of revivers at once. The first verified fork becomes the community fork.
+- **Donated projects** (your own repo) take one claimer at a time. The owner approves the request within 3 days, or it expires and the pledge is returned. The owner never reviews the code and never receives lost pledges, so nobody gains from failing a claimer.
+- The daily job runs the day-7 and deadline checks against GitHub. If it finds 3+ commits it pays out even if the reviver never pressed "Check my fork". If GitHub can't be reached it tries again the next day instead of penalising anyone.
+- Every money step runs in one database transaction with guarded status changes, so a double click or two people claiming at the same moment can't pay out, refund or overdraw twice. An append-only ledger records every credit movement.
 
 ### 5. Git is the proof of work
 A revival only counts when the server confirms, through the GitHub API, that:
-- The submitted repo is a **real fork** of the original.
+- The repo is a **real fork** of the original.
 - It has **new commits made after the claim**.
-- If the reviver linked GitHub, **at least one of those commits is theirs**.
-
-Verified revivers earn 100 credits and reputation.
+- **At least one of those commits is the claimer's** (matched to their linked GitHub account).
 
 ### 6. Anyone can grow the catalogue
-The **🔎 Suggest a Dead Repo** box on the Submit page takes one GitHub link, runs the same legal check, and lists the repo with its autopsy in about 10–30 seconds if it passes.
-
-### Donated projects
-Owners can also hand over their own projects, including ones that are not open source. These use a credit **stake** held in escrow so builders can't ghost. The owner has 7 days to review a submission, and an append-only ledger records every credit movement.
+Listing needs a public GitHub repo that is not a fork. Your own repo becomes a donated project; someone else's needs to be abandoned and under an open license. The full form asks for what a claimer needs before pledging: what "done" means, starter tasks, a time estimate, the claim length, a handoff letter, and whether you'll answer questions. The **🔎 Suggest a Dead Repo** box takes just a link. Each account can list 10 repos a day.
 
 ---
 
@@ -94,7 +102,7 @@ The only made-up data is a handful of **demo accounts** (`@campus.edu` emails) u
 | Database | PostgreSQL on [Neon](https://neon.tech), via Prisma 5 |
 | Data source | GitHub GraphQL + REST APIs (commits, contributor stats, license, forks, compare) |
 | Auth | Email + bcrypt passwords, optional GitHub OAuth, HMAC-signed `HttpOnly` session cookie |
-| Hosting | Vercel, with a daily cron job that expires stale claims |
+| Hosting | Vercel, with a daily cron job that runs the claim checks |
 
 ### Security notes
 - Users are shown to each other only by random aliases like `Digger-1042`; emails and GitHub identities stay private.
@@ -123,7 +131,7 @@ pages/
     projects/             list, create, suggest, claim
     commitments/          submit fork, withdraw, review
     auth/                 login, signup, GitHub OAuth, demo personas
-    cron/timeout-check    daily expiry of stale claims
+    cron/timeout-check    daily claim checks (day 7, deadline, expired requests)
 prisma/schema.prisma      User, Project, Commitment, Milestone, LedgerEntry
 scripts/                  local database, seeding, tests, Vercel DB setup
 docs/demo-script.html     class demo walkthrough and pitch
@@ -184,7 +192,8 @@ See [`.env.example`](.env.example). The important ones:
 | `npm run build` | Applies the schema safely (no data loss), then builds |
 | `npm run seed` | Demo accounts (local only, wipes data) |
 | `npm run seed:graves` | Adds real abandoned repos from GitHub (additive) |
-| `npm test` | End-to-end API test suite against a running server |
+| `npm test` | Full test suite: claim engine, auth, listing rules and API (HTTP parts need a running server) |
+| `npm run test:claims` | Claim engine only: pledges, checkpoints, payouts, races (local database) |
 | `npm run lint` | ESLint |
 
 ---

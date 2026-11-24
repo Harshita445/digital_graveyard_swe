@@ -2,6 +2,7 @@ import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
 import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest } from '../../../lib/githubIntelligence';
 import { classifyRepoForListing, guessCategory } from '../../../lib/listing';
+import { PLEDGE, DEFAULT_DONE_WHEN, DEFAULT_CLAIM_DAYS } from '../../../lib/claimRules';
 
 // GitHub analysis can take several seconds on big repos.
 export const config = { maxDuration: 60 };
@@ -23,7 +24,6 @@ export default async function handler(req, res) {
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(401).json({ error: 'User not found' });
-    if (user.banned) return res.status(403).json({ error: 'Your account is restricted due to ghost strikes (3+ strikes).' });
 
     const recent = await prisma.project.count({
       where: { ownerId: userId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: `${repo.full_name} can't be listed: ${verdict.reasons.join('; ')}.`, checks: verdict });
     }
     if (verdict.source === 'DONATED') {
-      return res.status(400).json({ error: 'This is your own repository. Use the full form below to donate it, so you can add a handoff letter.' });
+      return res.status(400).json({ error: 'This is your own repository. Use the full form below to donate it, so you can add a handoff letter and say what "done" means.' });
     }
 
     const tags = [repo.language, ...(repo.topics || [])].filter(Boolean).slice(0, 8);
@@ -60,12 +60,13 @@ export default async function handler(req, res) {
         ownerId: userId,
         title: repo.name,
         description: repo.description?.trim() || `${repo.name}: an abandoned ${repo.language || 'open-source'} project by ${repo.owner.login}.`,
-        stakeRequired: 0,
+        stakeRequired: PLEDGE,
         techTags: JSON.stringify(tags),
         category: guessCategory(repo),
         source: 'OPEN_GRAVE',
         completion: 0,
-        milestoneMode: false,
+        doneWhen: DEFAULT_DONE_WHEN,
+        claimDays: DEFAULT_CLAIM_DAYS,
         githubRepoUrl: parsed.url,
         status: 'LISTED'
       }

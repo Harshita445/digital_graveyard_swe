@@ -1,21 +1,19 @@
-import fs from 'fs';
-import path from 'path';
 import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
-import { refreshOpenGraveStatus, reviversOf, OPEN_GRAVE_CLAIM_DAYS } from '../../../lib/revivers';
-import { recordLedgerEntry } from '../../../lib/ledger';
+import { reviversOf } from '../../../lib/revivers';
+import { claimProject, approveRequest, endRequest, ClaimError } from '../../../lib/claims';
+import { PLEDGE, PROOF_DAYS, REQUEST_DAYS, MIN_NEW_COMMITS } from '../../../lib/claimRules';
 import { enrichProject } from '../../../lib/mockFallback';
 import { analyzeGitHubRepository } from '../../../lib/githubIntelligence';
 
 /**
  * Unified Project Details & Actions Route Handler
- * Consolidates project details, commit, approve, reject, and download.
  * Matches:
  *  - GET  /api/projects/:id
- *  - POST /api/projects/:id/commit
- *  - POST /api/projects/:id/approve
- *  - POST /api/projects/:id/reject
- *  - GET  /api/projects/:id/download
+ *  - POST /api/projects/:id/commit    (claim; locks the pledge)
+ *  - POST /api/projects/:id/approve   (donated: owner approves a request)
+ *  - POST /api/projects/:id/reject    (donated: owner declines a request)
+ *  - POST /api/projects/:id/analyze   (owner refreshes GitHub analysis)
  */
 export default async function handler(req, res) {
   const { slug } = req.query;
@@ -42,8 +40,6 @@ export default async function handler(req, res) {
       return handleApprove(req, res, projectId);
     case 'reject':
       return handleReject(req, res, projectId);
-    case 'download':
-      return handleDownload(req, res, projectId);
     case 'analyze':
       return handleAnalyze(req, res, projectId);
     default:
@@ -87,14 +83,13 @@ async function handleGetProject(req, res, id) {
         },
         commitments: {
           where: {
-            status: { in: ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED', 'COMPLETED', 'REJECTED_BADFAITH'] }
+            status: { in: ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED', 'COMPLETED'] }
           },
           orderBy: { committedAt: 'desc' },
           include: {
             taker: {
               select: { id: true, alias: true, reputation: true, ghostStrikes: true }
-            },
-            milestones: true
+            }
           }
         }
       }
@@ -126,339 +121,60 @@ async function handleGetProject(req, res, id) {
   }
 }
 
-// 2. POST /api/projects/:id/commit
+// Claim actions all go through lib/claims.js, so the pledge rules live in one place.
+function sendClaimError(res, err, fallback) {
+  if (err instanceof ClaimError) return res.status(err.status).json({ error: err.message });
+  console.error(fallback, err);
+  return res.status(500).json({ error: 'Internal server error' });
+}
+
+// 2. POST /api/projects/:id/commit  (claim)
 async function handleCommit(req, res, id) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const takerId = parseSession(req);
+  if (!takerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 
   try {
-    const takerId = parseSession(req);
-    if (!takerId) {
-      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
-    }
-
-    const taker = await prisma.user.findUnique({ where: { id: takerId } });
-    if (!taker) return res.status(404).json({ error: 'User not found' });
-    if (taker.banned) {
-      return res.status(403).json({ error: 'Account restricted due to ghost strikes (3+ strikes).' });
-    }
-
-    const project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        commitments: {
-          where: {
-            status: { in: ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED'] }
-          }
-        }
-      }
-    });
-
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-
-    // Whoever listed an open grave only discovered it; they can revive it like anyone else.
-    if (project.ownerId === takerId && project.source !== 'OPEN_GRAVE') {
-      return res.status(400).json({ error: 'You cannot claim your own project' });
-    }
-
-    // Open graves are community projects: no owner approval, no stake, and any number of
-    // people can revive one at once. Each person gets one claim at a time and one reward.
-    if (project.source === 'OPEN_GRAVE') {
-      const mine = await prisma.commitment.findFirst({
-        where: { projectId: project.id, takerId, status: { in: ['ACTIVE', 'COMPLETED'] } }
-      });
-      if (mine?.status === 'ACTIVE') {
-        return res.status(409).json({ error: 'You are already reviving this project.' });
-      }
-      if (mine?.status === 'COMPLETED') {
-        return res.status(409).json({ error: 'You already revived this project. Keep pushing to your fork; the revival stays credited to you.' });
-      }
-
-      const openCommitment = await prisma.commitment.create({
-        data: {
-          projectId: project.id,
-          takerId,
-          status: 'ACTIVE',
-          stakeLocked: 0,
-          committedAt: new Date(),
-          approvedAt: new Date(),
-          ghostDeadlineAt: new Date(Date.now() + OPEN_GRAVE_CLAIM_DAYS * 24 * 60 * 60 * 1000)
-        }
-      });
-      await refreshOpenGraveStatus(project.id);
-      const others = project.commitments.filter(c => c.status === 'ACTIVE').length;
-      return res.status(201).json({
-        commitment: openCommitment,
-        message: others > 0
-          ? `You joined ${others} other reviver${others === 1 ? '' : 's'}! ${project.revivedRepoUrl ? 'Send pull requests to the community fork or work in your own' : 'Team up in one fork or work in your own'}, then submit a fork with your commits to be verified.`
-          : 'Claimed! Fork the repository on GitHub, push your work, then submit your fork URL to be verified.'
-      });
-    }
-
-    if (project.commitments.length > 0) {
-      return res.status(409).json({ error: 'This project already has an active commitment' });
-    }
-
-    if (taker.credits < project.stakeRequired) {
-      return res.status(400).json({
-        error: `Insufficient credits for stake. Required: ${project.stakeRequired}, Available: ${taker.credits}`
-      });
-    }
-
-    const commitment = await prisma.commitment.create({
-      data: {
-        projectId: project.id,
-        takerId,
-        status: 'PENDING_APPROVAL',
-        stakeLocked: 0,
-        committedAt: new Date()
-      }
-    });
-
-    if (project.milestoneMode) {
-      const now = Date.now();
-      const day = 24 * 60 * 60 * 1000;
-      await prisma.milestone.createMany({
-        data: [
-          {
-            commitmentId: commitment.id,
-            title: 'M1: Architecture Review & Environment Setup',
-            dueAt: new Date(now + 4 * day),
-            status: 'PENDING'
-          },
-          {
-            commitmentId: commitment.id,
-            title: 'M2: Core Features & Logic Implementation',
-            dueAt: new Date(now + 9 * day),
-            status: 'PENDING'
-          },
-          {
-            commitmentId: commitment.id,
-            title: 'M3: Final Polish & Completion Delivery',
-            dueAt: new Date(now + 14 * day),
-            status: 'PENDING'
-          }
-        ]
-      });
-    }
-
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { status: 'PENDING_APPROVAL' }
-    });
-
-    return res.status(201).json({ commitment });
+    const { commitment, project } = await claimProject(id, takerId);
+    const message = project.source === 'OPEN_GRAVE'
+      ? `Claimed! ${PLEDGE} credits are pledged. Fork it and push a commit of your own within ${PROOF_DAYS} days; ${MIN_NEW_COMMITS} new commits finishes the revival. Quit any time to get the pledge back.`
+      : `Request sent. ${PLEDGE} credits are pledged while the owner decides (up to ${REQUEST_DAYS} days). If they decline or don't answer, you get it back.`;
+    return res.status(201).json({ commitment, message });
   } catch (err) {
-    console.error('Commit error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendClaimError(res, err, 'Claim error:');
   }
 }
 
-// 3. POST /api/projects/:id/approve
+// 3. POST /api/projects/:id/approve  (donated: owner picks who gets the claim)
 async function handleApprove(req, res, id) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const ownerId = parseSession(req);
+  if (!ownerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 
   try {
-    const ownerId = parseSession(req);
-    if (!ownerId) {
-      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
-    }
-
-    const { commitmentId } = req.body || {};
-
-    const project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        commitments: {
-          where: { id: commitmentId },
-          include: { taker: true }
-        }
-      }
-    });
-
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-    if (project.ownerId !== ownerId) {
-      return res.status(403).json({ error: 'Only the project owner can approve commitments' });
-    }
-
-    const commitment = project.commitments[0];
-    if (!commitment || commitment.status !== 'PENDING_APPROVAL') {
-      return res.status(400).json({ error: 'No pending commitment found to approve' });
-    }
-
-    if (commitment.taker.credits < project.stakeRequired) {
-      await prisma.commitment.update({
-        where: { id: commitment.id },
-        data: { status: 'CANCELLED', resolvedAt: new Date() }
-      });
-      await prisma.project.update({
-        where: { id: project.id },
-        data: { status: 'LISTED' }
-      });
-      return res.status(400).json({
-        error: 'Taker no longer has sufficient credits for the stake requirement. Commitment cancelled and project relisted.'
-      });
-    }
-
-    const ghostDeadlineAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-
-    await recordLedgerEntry({
-      userId: commitment.takerId,
-      type: 'STAKE_LOCK',
-      amount: -project.stakeRequired,
-      repDelta: 0,
-      relatedProjectId: project.id,
-      relatedCommitmentId: commitment.id,
-      notes: `Locked ${project.stakeRequired} credits stake in escrow for ${project.title}`
-    });
-
-    const updatedCommitment = await prisma.commitment.update({
-      where: { id: commitment.id },
-      data: {
-        status: 'ACTIVE',
-        stakeLocked: project.stakeRequired,
-        approvedAt: new Date(),
-        ghostDeadlineAt
-      }
-    });
-
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { status: 'ACTIVE' }
-    });
-
+    const commitment = await approveRequest(id, ownerId, (req.body || {}).commitmentId);
     return res.status(200).json({
-      commitment: updatedCommitment,
-      message: 'Commitment approved. Taker stake locked in escrow. Blind work phase is now ACTIVE.'
+      commitment,
+      message: `Approved. Their ${PROOF_DAYS}-day check and claim deadline start now. GitHub, not you, confirms the finished work.`
     });
   } catch (err) {
-    console.error('Approve error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendClaimError(res, err, 'Approve error:');
   }
 }
 
-// 4. POST /api/projects/:id/reject
+// 4. POST /api/projects/:id/reject  (donated: owner declines; the pledge goes back)
 async function handleReject(req, res, id) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  const ownerId = parseSession(req);
+  if (!ownerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
 
   try {
-    const ownerId = parseSession(req);
-    if (!ownerId) {
-      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
-    }
-
     const { commitmentId } = req.body || {};
-
-    const project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        commitments: {
-          where: { id: commitmentId }
-        }
-      }
-    });
-
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-    if (project.ownerId !== ownerId) {
-      return res.status(403).json({ error: 'Only the project owner can reject commitments' });
-    }
-
-    const commitment = project.commitments[0];
-    if (!commitment) {
-      return res.status(400).json({ error: 'Commitment not found' });
-    }
-
-    await prisma.commitment.update({
-      where: { id: commitment.id },
-      data: {
-        status: 'CANCELLED',
-        resolvedAt: new Date()
-      }
-    });
-
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { status: 'LISTED' }
-    });
-
-    return res.status(200).json({
-      message: 'Commitment rejected without penalty. Project relisted.'
-    });
+    const pending = await prisma.commitment.findFirst({ where: { id: commitmentId || '', projectId: id } });
+    if (!pending) return res.status(400).json({ error: 'Commitment not found' });
+    await endRequest(pending.id, { byUserId: ownerId, asOwner: true, reason: 'the owner declined your request' });
+    return res.status(200).json({ message: 'Request declined. Their pledge was returned and the project is listed again.' });
   } catch (err) {
-    console.error('Reject error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-}
-
-// 5. GET /api/projects/:id/download
-async function handleDownload(req, res, id) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const userId = parseSession(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
-    }
-
-    const project = await prisma.project.findUnique({
-      where: { id },
-      include: {
-        commitments: {
-          where: {
-            status: { in: ['ACTIVE', 'SUBMITTED', 'COMPLETED'] }
-          }
-        }
-      }
-    });
-
-    if (!project) return res.status(404).json({ error: 'Project not found' });
-
-    const isOwner = project.ownerId === userId;
-    const isApprovedTaker = project.commitments.some(c => c.takerId === userId);
-
-    if (!isOwner && !isApprovedTaker) {
-      return res.status(403).json({
-        error: 'Code is locked in escrow. Only the project owner or approved taker may download the source code.'
-      });
-    }
-
-    let fileBuffer;
-    if (project.fileUrl && project.fileUrl.startsWith('/uploads/')) {
-      const diskPath = path.join(process.cwd(), 'public', project.fileUrl);
-      if (fs.existsSync(diskPath)) {
-        fileBuffer = fs.readFileSync(diskPath);
-      }
-    }
-
-    if (!fileBuffer) {
-      const fileHeader = `=== PROJECT GRAVEYARD REPO ARCHIVE ===\n\n` +
-        `Project Title: ${project.title}\n` +
-        `Owner Alias: Anonymous (${project.ownerId})\n` +
-        `Category: ${project.category}\n` +
-        `Starting Completion: ${project.completion}%\n` +
-        `Stake Locked: ${project.stakeRequired} credits\n` +
-        `Timestamp: ${new Date().toISOString()}\n\n` +
-        `--- OVERVIEW & SPECS ---\n${project.description}\n\n` +
-        `--- REPO INSTRUCTIONS ---\n` +
-        `1. Review remaining incomplete components.\n` +
-        `2. Write implementation and tests.\n` +
-        `3. Submit completed deliverable back to Digital Graveyard before the 14-day timeout.\n`;
-
-      fileBuffer = Buffer.from(fileHeader);
-    }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${project.fileName || 'source.zip'}"`);
-    return res.status(200).send(fileBuffer);
-  } catch (err) {
-    console.error('Download error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    return sendClaimError(res, err, 'Reject error:');
   }
 }

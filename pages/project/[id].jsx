@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useApp } from '../../context/AppContext';
-import EscrowStatusBanner from '../../components/EscrowStatusBanner';
 import AutopsyChart, { CauseOfDeclineTags } from '../../components/AutopsyChart';
 import ProvenanceTimeline from '../../components/ProvenanceTimeline';
-import HandoverChecklist, { MilestoneTracker } from '../../components/HandoverChecklist';
+import HandoverChecklist from '../../components/HandoverChecklist';
+import { PLEDGE, PROOF_DAYS, MIN_NEW_COMMITS, REVIVE_REWARD, DEFAULT_DONE_WHEN, TIME_ESTIMATES, canAffordPledge } from '../../lib/claimRules';
 import Icon from '../../components/Icons';
-import { getLocalProjects, saveLocalProjects, STATIC_DEMO } from '../../lib/mockFallback';
+import { getLocalProjects } from '../../lib/mockFallback';
 
 export default function ProjectDetails({ projectId }) {
   const router = useRouter();
@@ -23,12 +23,9 @@ export default function ProjectDetails({ projectId }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
-  // Modals
+  // Fork check modal
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [submissionNotes, setSubmissionNotes] = useState('');
   const [submissionUrl, setSubmissionUrl] = useState('');
-
-  const [flagModalOpen, setFlagModalOpen] = useState(false);
 
   useEffect(() => {
     if (id) fetchProjectDetail();
@@ -51,390 +48,60 @@ export default function ProjectDetails({ projectId }) {
         return;
       }
     } catch (err) {
-      // In static / GitHub Pages demo mode
+      // Static demo export: fall back to the bundled sample projects (read-only)
     }
 
-    // Fallback in static / GitHub Pages demo mode
     const allProjects = getLocalProjects();
     const target = allProjects.find(p => p.id === id) || allProjects[0];
     if (target) {
       setProject(target);
-      const commitment = target.commitments?.[0] || null;
-      setActiveCommitment(commitment);
-      let role = 'GUEST';
-      if (currentUser) {
-        if (currentUser.id === target.ownerId) role = 'OWNER';
-        else if (commitment && commitment.takerId === currentUser.id) role = 'TAKER';
-      }
-      setUserRole(role);
+      setActiveCommitment(target.commitments?.[0] || null);
+      setUserRole('GUEST');
     }
     setLoading(false);
   };
 
-  // 1. Taker claims project
-  const handleCommit = async () => {
+  // Every claim action is one POST; the server applies the pledge rules and explains any refusal.
+  const act = async (url, body, kind = 'success') => {
     if (!currentUser) {
-      addToast('Please sign in or create an account to claim a codebase.', 'info');
       router.push(`/login?redirect=/project/${project?.id || ''}`);
-      return;
+      return null;
     }
-    if (currentUser.credits < (project?.stakeRequired || 0)) {
-      addToast(`Insufficient credits. Required: ${project.stakeRequired}, Available: ${currentUser.credits}`, 'error');
-      return;
-    }
-
+    setActionLoading(true);
     try {
-      setActionLoading(true);
-      const res = await fetch(`/api/projects/${project.id}/commit`, {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'x-user-id': currentUser.id }
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok) {
-        addToast(data?.message || 'Claim submitted! Awaiting owner approval to lock escrow.', 'success');
-        await fetchProjectDetail();
-        await refreshUser();
-        setActionLoading(false);
-        return;
-      }
-      if (data?.error) {
-        addToast(data.error, 'error');
-        setActionLoading(false);
-        return;
-      }
-    } catch (err) {
-      // Network failure only: handled in static demo fallback below
-    }
-
-    // Fallback for static demo mode
-    if (!STATIC_DEMO) {
-      addToast('Could not reach the server. Check your connection and try again.', 'error');
-      setActionLoading(false);
-      return;
-    }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        return {
-          ...p,
-          status: 'PENDING_APPROVAL',
-          commitments: [
-            {
-              id: `c-${Date.now()}`,
-              projectId: p.id,
-              takerId: currentUser.id,
-              taker: currentUser,
-              status: 'PENDING_APPROVAL',
-              stakeLocked: 0,
-              committedAt: new Date().toISOString()
-            }
-          ]
-        };
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast('Claim submitted! Awaiting owner approval (Demo Mode)', 'success');
-    await fetchProjectDetail();
-    setActionLoading(false);
-  };
-
-  // 2. Owner approves commitment
-  const handleApprove = async () => {
-    if (!currentUser) {
-      addToast('Please log in to approve commitments', 'error');
-      return;
-    }
-    if (!activeCommitment) return;
-    try {
-      setActionLoading(true);
-      const res = await fetch(`/api/projects/${project.id}/approve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id
-        },
-        body: JSON.stringify({ commitmentId: activeCommitment.id })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        addToast(data.message, 'success');
-        await fetchProjectDetail();
-        await refreshUser();
-        return;
-      }
-    } catch (err) {
-      // Handled in fallback
-    }
-
-    // Fallback for static demo mode
-    if (!STATIC_DEMO) {
-      addToast('Could not reach the server. Check your connection and try again.', 'error');
-      setActionLoading(false);
-      return;
-    }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        return {
-          ...p,
-          status: 'ACTIVE',
-          commitments: (p.commitments || []).map(c => ({
-            ...c,
-            status: 'ACTIVE',
-            stakeLocked: p.stakeRequired,
-            approvedAt: new Date().toISOString(),
-            ghostDeadlineAt: new Date(Date.now() + 14 * 86400000).toISOString()
-          }))
-        };
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast('Commitment approved and escrow stake locked! (Demo Mode)', 'success');
-    await fetchProjectDetail();
-    setActionLoading(false);
-  };
-
-  // 3. Owner rejects commitment
-  const handleReject = async () => {
-    if (!currentUser) {
-      addToast('Please log in first', 'error');
-      return;
-    }
-    if (!activeCommitment) return;
-    try {
-      setActionLoading(true);
-      const res = await fetch(`/api/projects/${project.id}/reject`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id
-        },
-        body: JSON.stringify({ commitmentId: activeCommitment.id })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        addToast(data.message, 'info');
-        await fetchProjectDetail();
-        return;
-      }
-    } catch (err) {
-      // Handled in fallback
-    }
-
-    if (!STATIC_DEMO) {
-      addToast('Could not reach the server. Check your connection and try again.', 'error');
-      setActionLoading(false);
-      return;
-    }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        return {
-          ...p,
-          status: 'LISTED',
-          commitments: []
-        };
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast('Commitment rejected and project relisted (Demo Mode)', 'info');
-    await fetchProjectDetail();
-    setActionLoading(false);
-  };
-
-  // 4. Taker withdraws pre-approval
-  const handleWithdraw = async () => {
-    if (!currentUser) {
-      addToast('Please log in first', 'error');
-      return;
-    }
-    if (!activeCommitment) return;
-    try {
-      setActionLoading(true);
-      const res = await fetch(`/api/commitments/${activeCommitment.id}/withdraw`, {
-        method: 'POST',
-        headers: { 'x-user-id': currentUser.id }
+        headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser.id },
+        body: JSON.stringify(body || {})
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        addToast(data.message, 'info');
-        await fetchProjectDetail();
-        await refreshUser();
-        return;
+      if (!res.ok) {
+        addToast(data.error || 'That did not work. Please try again.', 'error');
+        return null;
       }
-      addToast(data.error || 'Could not leave this project.', 'error');
-      setActionLoading(false);
-      return;
+      addToast(data.message || 'Done.', kind);
+      await fetchProjectDetail();
+      await refreshUser();
+      return data;
     } catch (err) {
-      // Handled in fallback
-    }
-
-    if (!STATIC_DEMO) {
       addToast('Could not reach the server. Check your connection and try again.', 'error');
+      return null;
+    } finally {
       setActionLoading(false);
-      return;
     }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        return { ...p, status: 'LISTED', commitments: [] };
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast('Commitment withdrawn (Demo Mode)', 'info');
-    await fetchProjectDetail();
-    setActionLoading(false);
   };
 
-  // 5. Taker submits completed work
-  const handleSubmitDeliverable = async () => {
-    if (!currentUser) {
-      addToast('Please log in first', 'error');
-      return;
-    }
-    if (!activeCommitment) return;
-    try {
-      setActionLoading(true);
-      const res = await fetch(`/api/commitments/${activeCommitment.id}/submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id
-        },
-        body: JSON.stringify({
-          notes: submissionNotes,
-          deliverableUrl: submissionUrl
-        })
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok) {
-        addToast(data?.message || 'Submitted.', 'success');
-        setSubmitModalOpen(false);
-        await fetchProjectDetail();
-        await refreshUser();
-        setActionLoading(false);
-        return;
-      }
-      if (data?.error) {
-        // e.g. "That repository is not a fork of ..." — show the real reason.
-        addToast(data.error, 'error');
-        setActionLoading(false);
-        return;
-      }
-    } catch (err) {
-      // Network failure only: handled in static demo fallback below
-    }
-
-    if (!STATIC_DEMO) {
-      addToast('Could not reach the server. Check your connection and try again.', 'error');
-      setActionLoading(false);
-      return;
-    }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        return {
-          ...p,
-          status: 'SUBMITTED',
-          reviewTimeoutAt: new Date(Date.now() + 7 * 86400000).toISOString(),
-          commitments: (p.commitments || []).map(c => ({
-            ...c,
-            status: 'SUBMITTED',
-            submittedAt: new Date().toISOString(),
-            submissionNotes,
-            submissionUrl
-          }))
-        };
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast('Deliverable submitted for review! (Demo Mode)', 'success');
-    setSubmitModalOpen(false);
-    await fetchProjectDetail();
-    setActionLoading(false);
+  const handleCommit = () => act(`/api/projects/${project.id}/commit`);
+  const handleApprove = () => act(`/api/projects/${project.id}/approve`, { commitmentId: activeCommitment?.id });
+  const handleReject = () => act(`/api/projects/${project.id}/reject`, { commitmentId: activeCommitment?.id }, 'info');
+  const handleWithdraw = () => {
+    if (activeCommitment?.status === 'ACTIVE' &&
+      !window.confirm(`Quit this claim? Your ${activeCommitment.stakeLocked || PLEDGE} credits come back and there is no penalty.`)) return;
+    return act(`/api/commitments/${activeCommitment.id}/withdraw`, null, 'info');
   };
-
-  // 6. Owner verifies deliverable (approve or flagBadFaith)
-  const handleVerify = async (decision) => {
-    if (!currentUser) {
-      addToast('Please log in first', 'error');
-      return;
-    }
-    if (!activeCommitment) return;
-    try {
-      setActionLoading(true);
-      const res = await fetch(`/api/commitments/${activeCommitment.id}/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUser.id
-        },
-        body: JSON.stringify({ decision })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        addToast(data.message, decision === 'approve' ? 'success' : 'warning');
-        setFlagModalOpen(false);
-        await fetchProjectDetail();
-        await refreshUser();
-        return;
-      }
-    } catch (err) {
-      // Handled in fallback
-    }
-
-    if (!STATIC_DEMO) {
-      addToast('Could not reach the server. Check your connection and try again.', 'error');
-      setActionLoading(false);
-      return;
-    }
-    const allProjects = getLocalProjects();
-    const updated = allProjects.map(p => {
-      if (p.id === project.id) {
-        if (decision === 'approve') {
-          return {
-            ...p,
-            status: 'COMPLETED',
-            completion: 100,
-            commitments: (p.commitments || []).map(c => ({
-              ...c,
-              status: 'COMPLETED',
-              resolvedAt: new Date().toISOString()
-            }))
-          };
-        } else {
-          return {
-            ...p,
-            status: 'GHOSTED_RELISTED',
-            commitments: (p.commitments || []).map(c => ({
-              ...c,
-              status: 'FLAGGED',
-              resolvedAt: new Date().toISOString()
-            }))
-          };
-        }
-      }
-      return p;
-    });
-    saveLocalProjects(updated);
-    addToast(decision === 'approve' ? 'Work approved & stake released! (Demo Mode)' : 'Forfeited & relisted! (Demo Mode)', 'success');
-    setFlagModalOpen(false);
-    await fetchProjectDetail();
-    setActionLoading(false);
-  };
-
-  // Download project source code
-  const handleDownload = () => {
-    if (project?.id) {
-      window.location.href = `/api/projects/${project.id}/download`;
-    } else {
-      window.open('/downloads/source.zip', '_blank');
-    }
+  const handleCheckFork = async () => {
+    const data = await act(`/api/commitments/${activeCommitment.id}/submit`, { forkUrl: submissionUrl.trim() });
+    if (data) setSubmitModalOpen(false);
   };
 
   const handleAnalyzeRepository = async () => {
@@ -491,13 +158,14 @@ export default function ProjectDetails({ projectId }) {
   const isTaker = userRole === 'TAKER';
   const isPending = activeCommitment?.status === 'PENDING_APPROVAL';
   const isActive = activeCommitment?.status === 'ACTIVE';
-  const isSubmitted = activeCommitment?.status === 'SUBMITTED';
   const isCompleted = project.status === 'COMPLETED';
   const github = project.githubIntelligence;
   const isOpenGrave = project.source === 'OPEN_GRAVE';
   // On open graves many people revive at once: "done" means *your* fork was verified.
   const myRevivalDone = isOpenGrave ? activeCommitment?.status === 'COMPLETED' : isCompleted;
   const workingCount = revivers.filter(r => r.status === 'ACTIVE').length;
+  // Open graves take any number of people; a donated project takes one at a time.
+  const canClaim = isOpenGrave || project.status === 'LISTED';
 
   return (
     <div className="container" style={{ padding: '36px 0 70px' }}>
@@ -510,31 +178,24 @@ export default function ProjectDetails({ projectId }) {
         <Icon name="chevronLeft" size={15} /> Back to Graveyard
       </Link>
 
-      {/* Escrow Pipeline Tracker */}
-      {isOpenGrave ? (
-        <div className="sketch-card-static" style={{ padding: '14px 18px', marginBottom: 22, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
-          {[
-            { key: 'LISTED', label: '🪦 Dead' },
-            { key: 'ACTIVE', label: '🌱 Claimed & being revived' },
-            { key: 'COMPLETED', label: '✨ Revived (fork verified)' }
-          ].map((stage, i, all) => {
-            const order = ['LISTED', 'ACTIVE', 'COMPLETED'];
-            const reached = order.indexOf(project.status) >= order.indexOf(stage.key);
-            return (
-              <React.Fragment key={stage.key}>
-                <span style={{ fontWeight: reached ? 800 : 400, opacity: reached ? 1 : 0.45 }}>{stage.label}</span>
-                {i < all.length - 1 && <span style={{ opacity: 0.4 }}>→</span>}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      ) : (
-        <EscrowStatusBanner
-          status={project.status}
-          activeCommitment={activeCommitment}
-          reviewTimeoutAt={project.reviewTimeoutAt}
-        />
-      )}
+      {/* Life of a grave */}
+      <div className="sketch-card-static" style={{ padding: '14px 18px', marginBottom: 22, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: 13, fontFamily: 'var(--font-mono)' }}>
+        {[
+          { key: 'LISTED', label: '🪦 Dead' },
+          { key: 'ACTIVE', label: '🌱 Claimed & being revived' },
+          { key: 'COMPLETED', label: '✨ Revived (fork verified)' }
+        ].map((stage, i, all) => {
+          const order = ['LISTED', 'ACTIVE', 'COMPLETED'];
+          const current = project.status === 'PENDING_APPROVAL' ? 'LISTED' : project.status;
+          const reached = order.indexOf(current) >= order.indexOf(stage.key);
+          return (
+            <React.Fragment key={stage.key}>
+              <span style={{ fontWeight: reached ? 800 : 400, opacity: reached ? 1 : 0.45 }}>{stage.label}</span>
+              {i < all.length - 1 && <span style={{ opacity: 0.4 }}>→</span>}
+            </React.Fragment>
+          );
+        })}
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: 32, alignItems: 'start' }}>
         {/* Left Column: Codebase Details */}
@@ -559,15 +220,12 @@ export default function ProjectDetails({ projectId }) {
               {project.license && (
                 <span className="chip" style={{ fontSize: 12 }}>📜 {project.license}</span>
               )}
-              {project.stakeRequired > 0 && (
-                <span className="chip chip-accent" style={{ fontSize: 12 }}>
-                  🔒 {project.stakeRequired} credits stake
-                </span>
+              <span className="chip" style={{ fontSize: 12 }}>⏳ {project.claimDays || 30}-day claims</span>
+              {project.timeEstimate && TIME_ESTIMATES[project.timeEstimate] && (
+                <span className="chip" style={{ fontSize: 12 }}>🕒 {TIME_ESTIMATES[project.timeEstimate]}</span>
               )}
-              {project.milestoneMode && (
-                <span className="chip chip-teal" style={{ fontSize: 12 }}>
-                  ✓ Milestone Mode
-                </span>
+              {project.bounty > 0 && (
+                <span className="chip chip-accent" style={{ fontSize: 12 }}>💰 {project.bounty} cr bounty</span>
               )}
             </div>
 
@@ -629,7 +287,7 @@ export default function ProjectDetails({ projectId }) {
             {[
               { id: 'overview', label: '📋 Overview & Specs' },
               { id: 'autopsy', label: '🔬 Autopsy & Diagnostics' },
-              { id: 'handover', label: isOpenGrave ? '🌱 Claim & Revive' : '🌱 Escrow & Handover' },
+              { id: 'handover', label: '🌱 Claim & Revive' },
               { id: 'provenance', label: '📜 Provenance Ledger' }
             ].map(tab => (
               <button
@@ -702,6 +360,24 @@ export default function ProjectDetails({ projectId }) {
                 </div>
               </div>
               )}
+
+              <div className="card" style={{ padding: 24, marginBottom: 24, background: '#FFFFFF' }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-display)', margin: '0 0 8px' }}>🏁 Done when</h3>
+                <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-muted)', margin: 0 }}>{project.doneWhen || DEFAULT_DONE_WHEN}</p>
+                {project.starterTasks && (
+                  <>
+                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: '16px 0 6px' }}>Starter tasks</h4>
+                    <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                      {project.starterTasks.split('\n').map(t => t.trim()).filter(Boolean).map((t, i) => <li key={i}>{t}</li>)}
+                    </ul>
+                  </>
+                )}
+                {!isOpenGrave && (
+                  <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '14px 0 0' }}>
+                    {project.ownerAvailable ? '💬 The owner is happy to answer questions from whoever claims it.' : 'The owner has not offered to answer questions.'}
+                  </p>
+                )}
+              </div>
 
               {project.handoffNote && (
                 <div className="card" style={{ padding: 24, marginBottom: 24, background: '#FFFDF6' }}>
@@ -811,20 +487,13 @@ export default function ProjectDetails({ projectId }) {
                   <Icon name="shield" size={17} />
                   <strong style={{ fontSize: 14.5, fontFamily: 'var(--font-display)' }}>System Enforced Trust Guarantees</strong>
                 </div>
-                {isOpenGrave ? (
                 <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-                  <li><strong>Legal by license:</strong> the {project.license} license already permits forking and modifying this code with attribution.</li>
-                  <li><strong>Git is the proof:</strong> a revival only counts when your fork has new commits made after you claimed it. GitHub&apos;s history shows who wrote what.</li>
-                  <li><strong>No plagiarism of the original:</strong> the original author is credited on this page and in your fork&apos;s history.</li>
+                  {isOpenGrave
+                    ? <li><strong>Legal by license:</strong> the {project.license} license already permits forking and modifying this code with attribution.</li>
+                    : <li><strong>Verified owner:</strong> only the GitHub account that owns this repository could list it.</li>}
+                  <li><strong>Git is the proof:</strong> a revival counts when a fork has {MIN_NEW_COMMITS}+ new commits made after the claim, at least one by the claimer. Nobody can withhold the reward.</li>
+                  <li><strong>No silent squatting:</strong> claimers pledge {PLEDGE} credits and must show a commit within {PROOF_DAYS} days. Disappearing sends the pledge to this project&apos;s bounty; quitting honestly costs nothing.</li>
                 </ul>
-                ) : (
-                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-                  <li><strong>Verified owner:</strong> only the GitHub account that owns this repository could list it.</li>
-                  <li><strong>Zero Exposure:</strong> Neither party ever sees the other&apos;s real email, name, or contact details.</li>
-                  <li><strong>Ghost Protection:</strong> If the builder stops working for 14 days, their stake is automatically forfeited to the owner and the project relists.</li>
-                  <li><strong>Review Protection:</strong> If the owner fails to verify submitted work within 7 days, the system automatically awards the reward to the builder.</li>
-                </ul>
-                )}
               </div>
             </div>
           )}
@@ -852,26 +521,6 @@ export default function ProjectDetails({ projectId }) {
                 <HandoverChecklist project={project} commitment={activeCommitment} revivers={revivers} />
               </div>
 
-              {/* Milestones Section */}
-              {activeCommitment && activeCommitment.milestones && activeCommitment.milestones.length > 0 && (
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--font-display)', margin: 0, color: 'var(--text)' }}>
-                      Milestone Checkpoints
-                    </h3>
-                    <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>
-                      System-tracked milestones
-                    </span>
-                  </div>
-                  <MilestoneTracker
-                    commitmentId={activeCommitment.id}
-                    milestones={activeCommitment.milestones}
-                    isTaker={isTaker}
-                    onMilestoneUpdated={fetchProjectDetail}
-                  />
-                </div>
-              )}
-
               {/* Submitted Notes (if SUBMITTED) */}
               {activeCommitment?.submissionNotes && (
                 <div
@@ -885,7 +534,7 @@ export default function ProjectDetails({ projectId }) {
                   }}
                 >
                   <h4 style={{ margin: '0 0 8px', fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>
-                    Taker Deliverable Notes
+                    Verification
                   </h4>
                   <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0 }}>
                     {activeCommitment.submissionNotes}
@@ -920,304 +569,152 @@ export default function ProjectDetails({ projectId }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: '1.5px solid var(--border)' }}>
               <Icon name="lock" size={17} />
               <h3 className="font-display" style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>
-                {isOpenGrave ? 'Claim & Revive' : 'Escrow & Claim Actions'}
+                Claim & Revive
               </h3>
             </div>
 
-            {/* CASE 1: Current User is OWNER */}
+            {/* CASE 1: owner of a donated project */}
             {isOwner && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ padding: '10px 12px', background: 'rgba(232,162,74,.1)', borderRadius: 8, fontSize: 13, color: 'var(--accent)' }}>
-                  👑 You own this project.
+                  👑 You donated this project. You choose who gets the claim; GitHub checks the work.
                 </div>
 
-                {/* A. Pending Commitment waiting for Owner Approval */}
                 {isPending && activeCommitment && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                      <strong>{activeCommitment.taker?.alias}</strong> ({activeCommitment.taker?.reputation} rep) requested to claim this project.
+                      <strong>{activeCommitment.taker?.alias}</strong> ({activeCommitment.taker?.reputation} rep, {activeCommitment.taker?.ghostStrikes || 0} missed claims) wants to claim it.
                     </div>
                     <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>
-                      Approving will lock <strong>{project.stakeRequired} credits</strong> from the taker in escrow and begin the 14-day work timer.
+                      They have pledged {activeCommitment.stakeLocked} credits. Answer by {fmtDate(activeCommitment.requestExpiresAt)} or the request expires and their pledge goes back.
                     </p>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="btn btn-primary btn-block"
-                        onClick={handleApprove}
-                        disabled={actionLoading}
-                      >
-                        {actionLoading ? 'Approving...' : 'Approve & Lock Stake'}
+                      <button className="btn btn-primary btn-block" onClick={handleApprove} disabled={actionLoading}>
+                        {actionLoading ? 'Saving…' : 'Approve'}
                       </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={handleReject}
-                        disabled={actionLoading}
-                      >
-                        Decline
-                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={handleReject} disabled={actionLoading}>Decline</button>
                     </div>
                   </div>
                 )}
 
-                {/* B. Active work in progress */}
                 {isActive && (
-                  <div>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
-                      Taker <strong>{activeCommitment.taker?.alias}</strong> is actively working off-platform.
-                    </div>
-                    <div className="chip chip-accent" style={{ marginBottom: 14 }}>
-                      🔒 {activeCommitment.stakeLocked} credits locked in escrow
-                    </div>
-                    <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>
-                      Taker has until {new Date(activeCommitment.ghostDeadlineAt).toLocaleDateString()} to deliver completed code.
-                    </p>
+                  <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    <strong>{activeCommitment.taker?.alias}</strong> is reviving it.
+                    <ClaimTimeline commitment={activeCommitment} />
                   </div>
                 )}
 
-                {/* C. Work Submitted - Owner must verify */}
-                {isSubmitted && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div style={{ fontSize: 13, color: 'var(--accent-2)', fontWeight: 600 }}>
-                      🎉 Deliverable ready for your review!
-                    </div>
-                    <button className="btn btn-secondary btn-block" onClick={handleDownload}>
-                      <Icon name="download" size={14} /> Download Deliverable
-                    </button>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        className="btn btn-primary btn-block"
-                        onClick={() => handleVerify('approve')}
-                        disabled={actionLoading}
-                      >
-                        {actionLoading ? 'Releasing...' : 'Verify & Release (+100 cr)'}
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => setFlagModalOpen(true)}
-                        disabled={actionLoading}
-                      >
-                        Flag Bad-Faith
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* D. Project Completed */}
                 {isCompleted && (
                   <div style={{ padding: '12px 14px', background: 'rgba(95,179,163,.15)', borderRadius: 10, fontSize: 13, color: 'var(--accent-2)' }}>
-                    <Icon name="check" size={15} /> Project successfully revived and closed.
+                    <Icon name="check" size={15} /> Revived. The living version is linked above.
                   </div>
                 )}
 
-                {/* E. Listed with no commitments */}
-                {!activeCommitment && (
+                {!isPending && !isActive && !isCompleted && (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    Your project is listed in Browse and waiting for an anonymous taker to stake credits.
+                    Listed and waiting for someone to request it.
                   </div>
                 )}
               </div>
             )}
 
-            {/* CASE 2: Current User is the TAKER */}
+            {/* CASE 2: you have a claim (or a request) */}
             {isTaker && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ padding: '10px 12px', background: 'rgba(95,179,163,.12)', borderRadius: 8, fontSize: 13, color: 'var(--accent-2)' }}>
-                  {isOpenGrave
-                    ? (myRevivalDone
-                      ? '✨ You helped revive this project.'
-                      : `🛠️ You are reviving this${workingCount > 1 ? ` with ${workingCount - 1} other${workingCount === 2 ? '' : 's'}` : ''}.`)
-                    : '🛠️ You are the committed builder for this codebase.'}
+                  {myRevivalDone
+                    ? '✨ You revived this project.'
+                    : isPending
+                      ? '⏳ Your request is with the owner.'
+                      : `🛠️ You are reviving this${isOpenGrave && workingCount > 1 ? ` with ${workingCount - 1} other${workingCount === 2 ? '' : 's'}` : ''}.`}
                 </div>
 
-                {/* A. Pending approval */}
                 {isPending && (
-                  <div>
-                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
-                      Your claim request has been sent to the owner. Once approved, your {project.stakeRequired} credits stake will be locked.
+                  <>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+                      {activeCommitment.stakeLocked} credits are pledged. If the owner declines or doesn&apos;t answer by {fmtDate(activeCommitment.requestExpiresAt)}, they come back.
                     </p>
-                    <button
-                      className="btn btn-outline btn-sm btn-block"
-                      onClick={handleWithdraw}
-                      disabled={actionLoading}
-                    >
-                      Cancel Claim (-2 Rep Penalty)
+                    <button className="btn btn-outline btn-sm btn-block" onClick={handleWithdraw} disabled={actionLoading}>
+                      Cancel Request (pledge back)
                     </button>
-                  </div>
+                  </>
                 )}
 
-                {/* B. Active work phase */}
                 {isActive && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {isOpenGrave ? (
-                      <>
-                        {project.revivedRepoUrl ? (
-                          <>
-                            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                              <li>Fork the <strong>community fork</strong> (the living version) and send it pull requests, or keep your own fork.</li>
-                              <li>Push at least one commit of your own.</li>
-                              <li>Submit the fork with your commits. We verify it automatically.</li>
-                            </ol>
-                            <a className="btn btn-primary btn-block" href={project.revivedRepoUrl} target="_blank" rel="noreferrer"
-                              style={{ textAlign: 'center', textDecoration: 'none' }}>
-                              Open Community Fork ↗
-                            </a>
-                          </>
-                        ) : (
-                          <>
-                            <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                              <li>Fork the original on GitHub{workingCount > 1 ? ', or team up with the other revivers in one fork' : ''}.</li>
-                              <li>Get it working again and push commits.</li>
-                              <li>Submit your fork&apos;s URL. We verify it automatically.</li>
-                            </ol>
-                            <a className="btn btn-primary btn-block" href={`${project.githubRepoUrl}/fork`} target="_blank" rel="noreferrer"
-                              style={{ textAlign: 'center', textDecoration: 'none' }}>
-                              Fork on GitHub ↗
-                            </a>
-                          </>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                          Stake locked: <strong>{activeCommitment.stakeLocked} credits</strong>
-                        </div>
-                        {project.githubRepoUrl ? (
-                          <a className="btn btn-primary btn-block" href={project.githubRepoUrl} target="_blank" rel="noreferrer"
-                            style={{ textAlign: 'center', textDecoration: 'none' }}>
-                            Open Repository ↗
-                          </a>
-                        ) : (
-                          <button className="btn btn-primary btn-block" onClick={handleDownload}>
-                            <Icon name="download" size={15} /> Download Source Code (.zip)
-                          </button>
-                        )}
-                      </>
-                    )}
-
-                    <button
-                      className="btn btn-teal btn-block"
-                      onClick={() => setSubmitModalOpen(true)}
-                    >
-                      <Icon name="upload" size={15} /> {isOpenGrave ? 'Submit My Fork for Verification' : 'Submit Completed Work'}
+                  <>
+                    <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                      <li>Fork it{isOpenGrave && project.revivedRepoUrl ? ' (or work in the community fork)' : ''} and push a commit of your own.</li>
+                      <li>Keep going until the fork has {MIN_NEW_COMMITS} new commits.</li>
+                      <li>Press <strong>Check my fork</strong>. GitHub decides the rest.</li>
+                    </ol>
+                    <ClaimTimeline commitment={activeCommitment} />
+                    <a className="btn btn-primary btn-block" href={`${project.revivedRepoUrl || project.githubRepoUrl}/fork`} target="_blank" rel="noreferrer"
+                      style={{ textAlign: 'center', textDecoration: 'none' }}>
+                      Fork on GitHub ↗
+                    </a>
+                    <button className="btn btn-teal btn-block" onClick={() => { setSubmissionUrl(activeCommitment.forkUrl || ''); setSubmitModalOpen(true); }}>
+                      <Icon name="upload" size={15} /> Check My Fork
                     </button>
-
-                    <div style={{ fontSize: 11.5, color: 'var(--text-dim)', textAlign: 'center' }}>
-                      {isOpenGrave
-                        ? `Your claim lapses on ${new Date(activeCommitment.ghostDeadlineAt).toLocaleDateString()} if no fork is verified. No penalty.`
-                        : 'Submit when finished to start the owner\'s 7-day review window.'}
+                    <button className="btn btn-outline btn-sm btn-block" onClick={handleWithdraw} disabled={actionLoading}>
+                      Quit (pledge back, no penalty)
+                    </button>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.45 }}>
+                      Missing a date without quitting sends your pledge to this project&apos;s bounty.
                     </div>
-                    {isOpenGrave && (
-                      <button className="btn btn-outline btn-sm btn-block" onClick={handleWithdraw} disabled={actionLoading}>
-                        Leave This Revival
-                      </button>
-                    )}
-                  </div>
+                  </>
                 )}
 
-                {/* C. Submitted */}
-                {isSubmitted && (
-                  <div style={{ padding: '12px', background: 'rgba(232,162,74,.1)', borderRadius: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>
-                      Awaiting Owner Verification
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      Your deliverable is under review. If the owner ghosts, your stake will be refunded and your 100 reward credits awarded automatically.
-                    </div>
-                  </div>
-                )}
-
-                {/* D. Completed */}
-                {myRevivalDone && (
-                  <div style={{ padding: '12px', background: 'rgba(95,179,163,.15)', borderRadius: 10, fontSize: 13, color: 'var(--accent-2)' }}>
-                    🎉 You revived it! 100 reward credits and +15 reputation were added to your ledger.
-                    {activeCommitment?.submissionNotes && (
-                      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'pre-line' }}>{activeCommitment.submissionNotes}</div>
-                    )}
-                  </div>
+                {myRevivalDone && activeCommitment?.submissionNotes && (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'pre-line' }}>{activeCommitment.submissionNotes}</div>
                 )}
               </div>
             )}
 
-            {/* CASE 3: GUEST / UNCOMMITTED USER */}
+            {/* CASE 3: everyone else */}
             {!isOwner && !isTaker && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {isOpenGrave ? (
+                {canClaim ? (
                   <>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                      {isCompleted
-                        ? 'Already revived, and it is a community project: join to keep improving the living version. Your own verified commits earn you credit too.'
-                        : workingCount > 0
-                          ? `${workingCount} ${workingCount === 1 ? 'person is' : 'people are'} reviving this right now. It is a community project, so you can join them.`
-                          : 'Free to claim: no stake and no owner approval, because the license already allows forking.'}
-                      {' '}Joining is free and lasts 14 days.
+                      {isOpenGrave
+                        ? (isCompleted
+                          ? 'Already revived, and still open: join to keep improving the living version.'
+                          : workingCount > 0
+                            ? `${workingCount} ${workingCount === 1 ? 'person is' : 'people are'} reviving this. Anyone can join.`
+                            : 'Anyone can claim it. The license already allows forking.')
+                        : 'The owner picks one person to revive it. Request it and they have 3 days to answer.'}
                     </div>
-                    <div className="surface2" style={{ padding: 14, borderRadius: 10, fontSize: 13 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span>Stake:</span><strong>None</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Reward when verified:</span><strong style={{ color: 'var(--accent-2)' }}>+100 cr (+15 rep)</strong>
-                      </div>
+                    <div className="surface2" style={{ padding: 14, borderRadius: 10, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <Row label="Pledge (returned when you finish or quit)" value={`${PLEDGE} cr`} />
+                      <Row label="First commit due" value={`within ${PROOF_DAYS} days`} />
+                      <Row label="Finish within" value={`${project.claimDays || 30} days`} />
+                      <Row label="Reward" value={`+${REVIVE_REWARD} cr${project.bounty > 0 ? ` + ${project.bounty} bounty` : ''}`} strong />
+                      {currentUser && <Row label="Your balance" value={`${currentUser.credits} cr`} />}
                     </div>
-                    {currentUser ? (
-                      <button className="btn btn-primary btn-block" onClick={handleCommit} disabled={actionLoading}>
-                        {actionLoading ? 'Joining...' : (workingCount > 0 || isCompleted) ? '🤝 Join the Revival' : '🌱 Claim & Start Reviving'}
-                      </button>
-                    ) : (
+                    {!currentUser ? (
                       <Link href={`/login?redirect=/project/${project.id}`} className="btn btn-primary btn-block"
                         style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {(workingCount > 0 || isCompleted) ? 'Sign In to Join →' : 'Sign In to Claim →'}
+                        Sign In to Claim →
                       </Link>
-                    )}
-                  </>
-                ) : project.status === 'LISTED' ? (
-                  <>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                      Claim this abandoned project to finish it off-platform. Upon owner approval, your stake will be held in escrow until verification.
-                    </div>
-
-                    <div className="surface2" style={{ padding: 14, borderRadius: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span>Required Stake:</span>
-                        <strong style={{ color: 'var(--accent)' }}>{project.stakeRequired} cr</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span>Completion Reward:</span>
-                        <strong style={{ color: 'var(--accent-2)' }}>+100 cr (+15 rep)</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
-                        <span>Your Balance:</span>
-                        <strong>{currentUser ? currentUser.credits : 0} cr</strong>
-                      </div>
-                    </div>
-
-                    {currentUser ? (
-                      <button
-                        className="btn btn-primary btn-block"
-                        onClick={handleCommit}
-                        disabled={actionLoading || currentUser.credits < project.stakeRequired}
-                      >
-                        {actionLoading ? 'Claiming...' : `Commit ${project.stakeRequired} Credits Stake`}
-                      </button>
                     ) : (
-                      <Link
-                        href={`/login?redirect=/project/${project.id}`}
-                        className="btn btn-primary btn-block"
-                        style={{ textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        Sign In to Claim Codebase →
-                      </Link>
+                      <button className="btn btn-primary btn-block" onClick={handleCommit}
+                        disabled={actionLoading || !canAffordPledge(currentUser.credits) || currentUser.banned || !currentUser.githubUsername}>
+                        {actionLoading ? 'Claiming…' : isOpenGrave
+                          ? `${workingCount > 0 || isCompleted ? '🤝 Join' : '🌱 Claim'} (pledge ${PLEDGE} cr)`
+                          : `🙋 Request This Project (pledge ${PLEDGE} cr)`}
+                      </button>
                     )}
-
-                    {!currentUser ? (
-                      <div style={{ fontSize: 11.5, color: 'var(--text-dim)', textAlign: 'center' }}>
-                        Create an account or sign in to lock escrow collateral.
-                      </div>
-                    ) : currentUser.credits < project.stakeRequired ? (
+                    {currentUser && !currentUser.githubUsername && (
+                      <div style={{ fontSize: 12, color: 'var(--error)', textAlign: 'center' }}>Connect GitHub to claim: your commits are how progress is checked.</div>
+                    )}
+                    {currentUser && currentUser.banned && (
+                      <div style={{ fontSize: 12, color: 'var(--error)', textAlign: 'center' }}>You left 3 claims without finishing or quitting, so you can&apos;t claim new projects.</div>
+                    )}
+                    {currentUser && !currentUser.banned && !canAffordPledge(currentUser.credits) && (
                       <div style={{ fontSize: 12, color: 'var(--error)', textAlign: 'center' }}>
-                        You need {project.stakeRequired - currentUser.credits} more credits to claim this project.
+                        You need {PLEDGE - currentUser.credits} more credits. Finish or quit a claim to free some.
                       </div>
-                    ) : null}
+                    )}
                   </>
                 ) : isCompleted ? (
                   <div style={{ padding: '14px', background: '#D9F2D4', borderRadius: 10, fontSize: 13, textAlign: 'center' }}>
@@ -1225,7 +722,7 @@ export default function ProjectDetails({ projectId }) {
                   </div>
                 ) : (
                   <div style={{ padding: '14px', background: 'var(--surface-2)', borderRadius: 10, fontSize: 13, color: 'var(--text-dim)', textAlign: 'center' }}>
-                    🌱 Someone is reviving this right now.
+                    🌱 Someone has this project right now. If they quit or miss a date, it opens up again.
                   </div>
                 )}
               </div>
@@ -1277,85 +774,65 @@ export default function ProjectDetails({ projectId }) {
         </div>
       </div>
 
-      {/* Deliverable Submission Modal */}
+      {/* Check my fork */}
       {submitModalOpen && (
         <div className="modal-backdrop" onClick={() => setSubmitModalOpen(false)}>
           <div className="modal-sketch" onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <h3 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>
-                {isOpenGrave ? 'Submit Your Revival' : 'Submit Completed Deliverable'}
-              </h3>
+              <h3 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: 0 }}>Check My Fork</h3>
               <button className="btn-icon btn-ghost" onClick={() => setSubmitModalOpen(false)}>
                 <Icon name="close" size={18} />
               </button>
             </div>
-
             <p style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 18, lineHeight: 1.5 }}>
-              {isOpenGrave
-                ? 'Paste your fork. We check on GitHub that it is a fork of the original with new commits made after you claimed it. If so, the project is marked revived immediately.'
-                : 'Provide summary notes of what you built, fixed, or tested. The owner will have 7 days to verify.'}
+              We ask GitHub whether this is a fork of the original with new commits since you claimed it, and whether at least one is yours.
+              One of your commits passes the 7-day check. {MIN_NEW_COMMITS} new commits finishes the revival and pays out straight away.
             </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div>
-                <label className="label">Completion Summary & Verification Notes *</label>
-                <textarea
-                  className="input"
-                  rows={4}
-                  placeholder="Explain the changes made, tests executed, and how to run the completed app..."
-                  value={submissionNotes}
-                  onChange={e => setSubmissionNotes(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="label">{isOpenGrave ? 'Your Fork on GitHub *' : 'Deliverable URL (GitHub fork, PR or archive)'}</label>
-                <input
-                  className="input"
-                  placeholder={isOpenGrave ? 'https://github.com/you/' + (project.githubRepoName || 'repo') : 'https://github.com/you/repo'}
-                  value={submissionUrl}
-                  onChange={e => setSubmissionUrl(e.target.value)}
-                />
-              </div>
-
-              <button
-                className="btn btn-primary btn-block"
-                style={{ marginTop: 10, padding: '12px' }}
-                onClick={handleSubmitDeliverable}
-                disabled={actionLoading || !submissionNotes.trim() || (isOpenGrave && !submissionUrl.trim())}
-              >
-                {actionLoading ? 'Verifying...' : isOpenGrave ? 'Verify My Revival' : 'Submit Deliverable & Begin 7-Day Review'}
-              </button>
-            </div>
+            <label className="label">Your fork on GitHub *</label>
+            <input
+              className="input"
+              placeholder={'https://github.com/you/' + (project.githubRepoName || 'repo')}
+              value={submissionUrl}
+              onChange={e => setSubmissionUrl(e.target.value)}
+            />
+            <button
+              className="btn btn-primary btn-block"
+              style={{ marginTop: 16, padding: '12px' }}
+              onClick={handleCheckFork}
+              disabled={actionLoading || !submissionUrl.trim()}
+            >
+              {actionLoading ? 'Asking GitHub…' : 'Check My Fork'}
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* Flag Bad-Faith Modal */}
-      {flagModalOpen && (
-        <div className="modal-backdrop" onClick={() => setFlagModalOpen(false)}>
-          <div className="modal-sketch" onClick={e => e.stopPropagation()}>
-            <h3 className="font-display" style={{ fontSize: 19, fontWeight: 800, margin: '0 0 10px', color: '#9E1C1C' }}>
-              Flag Bad-Faith / Plagiarized Submission
-            </h3>
-            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 20 }}>
-              Are you sure? Flagging bad-faith work will forfeit the builder&apos;s locked stake directly to you, apply a -15 reputation penalty to the builder, and relist this codebase in the graveyard.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setFlagModalOpen(false)}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={() => handleVerify('flagBadFaith')}
-                disabled={actionLoading}
-              >
-                {actionLoading ? 'Processing...' : 'Confirm Forfeiture & Relist'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+function fmtDate(d) {
+  return d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+}
+
+function Row({ label, value, strong }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+      <span>{label}</span>
+      <strong style={strong ? { color: 'var(--accent-2)' } : undefined}>{value}</strong>
+    </div>
+  );
+}
+
+// The two dates that matter on an active claim.
+function ClaimTimeline({ commitment }) {
+  if (!commitment) return null;
+  return (
+    <div className="surface2" style={{ padding: 12, borderRadius: 10, fontSize: 12.5, lineHeight: 1.7, marginTop: 6 }}>
+      {commitment.proofAt
+        ? <div>✅ First commit seen {fmtDate(commitment.proofAt)}</div>
+        : commitment.proofDueAt && <div>⏱️ First own commit due <strong>{fmtDate(commitment.proofDueAt)}</strong></div>}
+      {commitment.ghostDeadlineAt && <div>🏁 Finish by <strong>{fmtDate(commitment.ghostDeadlineAt)}</strong></div>}
+      {commitment.stakeLocked > 0 && <div>🤝 Pledged {commitment.stakeLocked} cr</div>}
     </div>
   );
 }

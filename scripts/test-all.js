@@ -21,7 +21,6 @@ if (!process.env.DATABASE_URL) {
 }
 
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
@@ -104,197 +103,19 @@ async function runSection1_Protocol() {
   const ledgerEntries = await prisma.ledgerEntry.findMany();
   console.log(`✓ 3. Verified ${ledgerEntries.length} immutable ledger audit records.`);
 
-  // 4. Full lifecycle test
-  const pwd = await bcrypt.hash('testpass', 10);
-  const stamp = Date.now();
-  const owner = await prisma.user.create({
-    data: {
-      email: `owner_${stamp}@graveyard.test`,
-      passwordHash: pwd,
-      alias: `Digger-${Math.floor(1000 + Math.random() * 9000)}`,
-      credits: 500,
-      reputation: 100
-    }
-  });
-
-  const taker = await prisma.user.create({
-    data: {
-      email: `taker_${stamp}@graveyard.test`,
-      passwordHash: pwd,
-      alias: `Digger-${Math.floor(1000 + Math.random() * 9000)}`,
-      credits: 500,
-      reputation: 100
-    }
-  });
-
-  console.log(`✓ 4. Created test actors: Owner (${owner.alias}) & Taker (${taker.alias})`);
-
-  // Project creation
-  const project = await prisma.project.create({
-    data: {
-      ownerId: owner.id,
-      title: 'Micro-Cache Kernel Module',
-      description: 'Zero-copy memory cache for course lab machines.',
-      category: 'Systems',
-      stakeRequired: 150,
-      completion: 50,
-      techTags: '["C", "Linux Kernel"]',
-      status: 'LISTED'
-    }
-  });
-  console.log(`✓ 5. Project listed: "${project.title}" (Stake required: ${project.stakeRequired} cr)`);
-
-  // Taker claims project
-  const commitment = await prisma.commitment.create({
-    data: {
-      projectId: project.id,
-      takerId: taker.id,
-      status: 'PENDING_APPROVAL',
-      stakeLocked: 0
-    }
-  });
-  console.log('✓ 6. Taker claimed project -> Status: PENDING_APPROVAL');
-
-  // Owner approves claim & locks stake
-  await prisma.ledgerEntry.create({
-    data: {
-      userId: taker.id,
-      type: 'STAKE_LOCK',
-      amount: -150,
-      relatedProjectId: project.id,
-      relatedCommitmentId: commitment.id,
-      notes: 'Stake locked upon owner approval'
-    }
-  });
-  await prisma.user.update({
-    where: { id: taker.id },
-    data: { credits: { decrement: 150 } }
-  });
-  await prisma.commitment.update({
-    where: { id: commitment.id },
-    data: { status: 'ACTIVE', stakeLocked: 150, approvedAt: new Date() }
-  });
-  console.log('✓ 7. Owner approved -> Stake 150 cr locked in escrow, Status: ACTIVE');
-
-  // Taker submits finished deliverable
-  await prisma.commitment.update({
-    where: { id: commitment.id },
-    data: {
-      status: 'SUBMITTED',
-      submittedAt: new Date(),
-      submissionNotes: 'All unit tests passing.'
-    }
-  });
-  console.log('✓ 8. Taker submitted deliverable -> Status: SUBMITTED');
-
-  // Owner verifies and approves completion
-  await prisma.ledgerEntry.create({
-    data: {
-      userId: taker.id,
-      type: 'STAKE_REFUND',
-      amount: 150,
-      relatedProjectId: project.id,
-      relatedCommitmentId: commitment.id,
-      notes: 'Stake refund upon verified completion'
-    }
-  });
-  await prisma.ledgerEntry.create({
-    data: {
-      userId: taker.id,
-      type: 'REWARD_CREDIT',
-      amount: 100,
-      relatedProjectId: project.id,
-      relatedCommitmentId: commitment.id,
-      notes: 'Completion reward'
-    }
-  });
-  await prisma.user.update({
-    where: { id: taker.id },
-    data: {
-      credits: { increment: 250 },
-      reputation: { increment: 15 }
-    }
-  });
-  await prisma.user.update({
-    where: { id: owner.id },
-    data: { reputation: { increment: 15 } }
-  });
-  await prisma.commitment.update({
-    where: { id: commitment.id },
-    data: { status: 'COMPLETED', resolvedAt: new Date() }
-  });
-  await prisma.project.update({
-    where: { id: project.id },
-    data: { status: 'COMPLETED', completion: 100 }
-  });
-  console.log('✓ 9. Owner verified deliverable -> Stake refunded + 100 cr reward + 15 rep awarded');
-
-  // Cleanup test entities cleanly
-  await prisma.ledgerEntry.deleteMany({ where: { userId: { in: [owner.id, taker.id] } } });
-  await prisma.commitment.deleteMany({ where: { projectId: project.id } });
-  await prisma.project.delete({ where: { id: project.id } });
-  await prisma.user.deleteMany({ where: { id: { in: [owner.id, taker.id] } } });
-  console.log('✓ 10. Cleaned up transient lifecycle test records');
 }
 
-async function runSection2_EdgeCases() {
+async function runSection2_ClaimEngine() {
   console.log('\n======================================================');
-  console.log(' SECTION 2: EDGE CASES & PENALTIES VERIFICATION');
+  console.log(' SECTION 2: CLAIM ENGINE (pledges, checkpoints, payouts)');
   console.log('======================================================');
-
-  const pwd = await bcrypt.hash('secret', 10);
-  const stamp = Date.now();
-
-  // Edge Case 1: Insufficient credits at approval
-  const owner1 = await prisma.user.create({
-    data: { email: `ec1_owner_${stamp}@test.com`, passwordHash: pwd, alias: `Digger-E10`, credits: 500 }
+  // The claim rules are tested in their own script, which imports the engine as ES modules.
+  const { spawnSync } = require('child_process');
+  const run = spawnSync(process.execPath, ['--no-warnings', path.join(__dirname, 'test-claims.mjs')], {
+    env: process.env, encoding: 'utf8'
   });
-  const taker1 = await prisma.user.create({
-    data: { email: `ec1_taker_${stamp}@test.com`, passwordHash: pwd, alias: `Digger-E11`, credits: 100 }
-  });
-  const proj1 = await prisma.project.create({
-    data: { ownerId: owner1.id, title: 'High Stake Project', description: 'Requires 150 cr', stakeRequired: 150, techTags: '["Test"]', status: 'PENDING_APPROVAL' }
-  });
-  const comm1 = await prisma.commitment.create({
-    data: { projectId: proj1.id, takerId: taker1.id, status: 'PENDING_APPROVAL', stakeLocked: 0 }
-  });
-
-  if (taker1.credits < proj1.stakeRequired) {
-    await prisma.commitment.update({ where: { id: comm1.id }, data: { status: 'CANCELLED' } });
-    await prisma.project.update({ where: { id: proj1.id }, data: { status: 'LISTED' } });
-    console.log('✓ Edge Case 1: Taker insufficient credits blocked at approval -> Commitment cancelled & relisted');
-  }
-
-  // Edge Case 2: Ban at 3 strikes
-  const bannedUser = await prisma.user.create({
-    data: { email: `ghost_${stamp}@test.com`, passwordHash: pwd, alias: `Digger-E20`, ghostStrikes: 2, banned: false }
-  });
-  const newStrikes = bannedUser.ghostStrikes + 1;
-  const isBanned = newStrikes >= 3;
-  await prisma.user.update({ where: { id: bannedUser.id }, data: { ghostStrikes: newStrikes, banned: isBanned } });
-  console.log(`✓ Edge Case 2: 3rd ghost strike correctly triggered account ban (banned: ${isBanned})`);
-
-  // Edge Case 3: Plagiarism / Bad-faith forfeiture
-  const owner3 = await prisma.user.create({ data: { email: `ec3_o_${stamp}@test.com`, passwordHash: pwd, alias: `Digger-E30`, credits: 200 } });
-  const taker3 = await prisma.user.create({ data: { email: `ec3_t_${stamp}@test.com`, passwordHash: pwd, alias: `Digger-E31`, credits: 500, reputation: 100 } });
-  const proj3 = await prisma.project.create({ data: { ownerId: owner3.id, title: 'Plagiarized Project', description: 'Testing flag', stakeRequired: 100, techTags: '["Test"]', status: 'SUBMITTED' } });
-  const comm3 = await prisma.commitment.create({ data: { projectId: proj3.id, takerId: taker3.id, status: 'SUBMITTED', stakeLocked: 100 } });
-
-  await prisma.user.update({ where: { id: owner3.id }, data: { credits: { increment: 100 } } });
-  await prisma.user.update({ where: { id: taker3.id }, data: { reputation: { decrement: 15 } } });
-  await prisma.commitment.update({ where: { id: comm3.id }, data: { status: 'REJECTED_BADFAITH' } });
-  await prisma.project.update({ where: { id: proj3.id }, data: { status: 'LISTED' } });
-  console.log('✓ Edge Case 3: Bad-faith flagged -> Stake 100 cr forfeited to Owner, Taker rep -15, project relisted');
-
-  // Edge Case 4: Owner ghost resolution (>7 days timeout)
-  console.log('✓ Edge Case 4: Owner verification timeout (>7d) deterministically releases escrow to Taker via cron');
-
-  // Cleanup edge case entities
-  await prisma.ledgerEntry.deleteMany({ where: { userId: { in: [owner1.id, taker1.id, bannedUser.id, owner3.id, taker3.id] } } });
-  await prisma.commitment.deleteMany({ where: { id: { in: [comm1.id, comm3.id] } } });
-  await prisma.project.deleteMany({ where: { id: { in: [proj1.id, proj3.id] } } });
-  await prisma.user.deleteMany({ where: { id: { in: [owner1.id, taker1.id, bannedUser.id, owner3.id, taker3.id] } } });
-  console.log('✓ Edge Case 5: Cleaned up transient edge case test data');
+  process.stdout.write(run.stdout || '');
+  if (run.status !== 0) throw new Error(`Claim engine tests failed:\n${run.stderr || ''}`);
 }
 
 async function runSection3_HTTPAuth() {
@@ -590,9 +411,26 @@ async function runSection5_LegalCheckAndAutopsy() {
   }
 }
 
+// Demo accounts need a linked GitHub login and enough credits to claim; this sets them up for the test.
+async function withClaimReady(email, fn) {
+  const u = await prisma.user.findUnique({ where: { email } });
+  const original = u.githubUsername;
+  await prisma.user.update({
+    where: { id: u.id },
+    data: { githubUsername: original || `test-${u.alias.toLowerCase()}`, ...(u.credits < 150 ? { credits: 500 } : {}) }
+  });
+  try {
+    return await fn(u);
+  } finally {
+    await prisma.user.update({ where: { id: u.id }, data: { githubUsername: original } }).catch(() => {});
+  }
+}
+
+const creditsOf = async id => (await prisma.user.findUnique({ where: { id } })).credits;
+
 async function runSection6_CommunityRevival() {
   console.log('\n======================================================');
-  console.log(' SECTION 6: COMMUNITY REVIVAL & FORK VERIFICATION (HTTP)');
+  console.log(' SECTION 6: CLAIMS OVER HTTP (pledge, join, quit)');
   console.log('======================================================');
 
   if (!(await serverIsUp())) {
@@ -600,7 +438,6 @@ async function runSection6_CommunityRevival() {
     return;
   }
 
-  // Pick an open grave nobody is working on.
   const grave = await prisma.project.findFirst({
     where: { source: 'OPEN_GRAVE', status: 'LISTED', githubRepoUrl: { not: null }, commitments: { none: { status: 'ACTIVE' } } }
   });
@@ -610,54 +447,110 @@ async function runSection6_CommunityRevival() {
   }
   const a = await loginAs('sarah.chen@campus.edu');
   const b = await loginAs('alex.rivera@campus.edu');
-  const commitIds = [];
 
-  try {
-    // 1. First person claims it.
-    const claimA = await api('POST', `/api/projects/${grave.id}/commit`, a);
-    expectStatus(claimA, 201, 'First claim');
-    commitIds.push([claimA.body.commitment.id, a]);
-    console.log(`✓ 1. Person A claimed "${grave.title}" with no stake (201)`);
+  await withClaimReady('sarah.chen@campus.edu', userA => withClaimReady('alex.rivera@campus.edu', async () => {
+    const commitIds = [];
+    const startA = await creditsOf(userA.id);
+    try {
+      // 1. Claiming pledges 150 credits.
+      const claimA = await api('POST', `/api/projects/${grave.id}/commit`, a);
+      expectStatus(claimA, 201, 'First claim');
+      commitIds.push([claimA.body.commitment.id, a]);
+      const afterClaim = await creditsOf(userA.id);
+      if (afterClaim !== startA - 150) throw new Error(`Expected a 150 pledge, balance went ${startA} -> ${afterClaim}`);
+      console.log(`✓ 1. Person A claimed "${grave.title}" and pledged 150 credits (201)`);
 
-    // 2. A second person can join the same grave.
-    const claimB = await api('POST', `/api/projects/${grave.id}/commit`, b);
-    expectStatus(claimB, 201, 'Second person joins');
-    commitIds.push([claimB.body.commitment.id, b]);
-    console.log('✓ 2. Person B joined the same revival (201)');
+      // 2. A second person can join an open grave.
+      const claimB = await api('POST', `/api/projects/${grave.id}/commit`, b);
+      expectStatus(claimB, 201, 'Second person joins');
+      commitIds.push([claimB.body.commitment.id, b]);
+      console.log('✓ 2. Person B joined the same revival (201)');
 
-    // 3. Both are listed in the revival crew, and the grave is now being revived.
-    const view = await api('GET', `/api/projects/${grave.id}`, a);
-    expectStatus(view, 200, 'View grave');
-    const activeCrew = view.body.revivers.filter(r => r.status === 'ACTIVE');
-    if (activeCrew.length !== 2) throw new Error(`Expected a crew of 2, got ${activeCrew.length}`);
-    if (view.body.project.status !== 'ACTIVE') throw new Error(`Expected status ACTIVE, got ${view.body.project.status}`);
-    console.log('✓ 3. Revival crew shows 2 people and the grave status is ACTIVE');
+      // 3. The page shows both, and the grave is being revived.
+      const view = await api('GET', `/api/projects/${grave.id}`, a);
+      expectStatus(view, 200, 'View grave');
+      const crew = view.body.revivers.filter(r => r.status === 'ACTIVE');
+      if (crew.length !== 2 || view.body.project.status !== 'ACTIVE') {
+        throw new Error(`Expected 2 revivers and ACTIVE, got ${crew.length} / ${view.body.project.status}`);
+      }
+      console.log('✓ 3. Revival crew shows 2 people and the grave status is ACTIVE');
 
-    // 4. The same person cannot claim twice.
-    expectStatus(await api('POST', `/api/projects/${grave.id}/commit`, a), 409, 'Double claim');
-    console.log('✓ 4. Claiming the same grave twice is refused (409)');
+      // 4. No double claims.
+      expectStatus(await api('POST', `/api/projects/${grave.id}/commit`, a), 409, 'Double claim');
+      console.log('✓ 4. Claiming the same grave twice is refused (409)');
 
-    // 5. Submitting a repo that is not a fork of the original is refused by the verifier.
-    const fake = await api('POST', `/api/commitments/${claimA.body.commitment.id}/submit`, a, { notes: 'test', deliverableUrl: 'https://github.com/vercel/next.js' });
-    if (fake.statusCode === 400) {
-      console.log(`✓ 5. Submitting a non-fork is refused (400): "${fake.body.error}"`);
-    } else {
-      throw new Error(`Submit a non-fork: expected 400, got ${fake.statusCode}`);
+      // 5. A repo that is not a fork of the original is refused.
+      const fake = await api('POST', `/api/commitments/${claimA.body.commitment.id}/submit`, a, { forkUrl: 'https://github.com/vercel/next.js' });
+      if (fake.statusCode === 400) console.log(`✓ 5. Checking a repo that is not a fork is refused (400): "${fake.body.error}"`);
+      else if (fake.statusCode === 502) console.log('ℹ️ 5. Skipped: the server could not reach GitHub');
+      else throw new Error(`Check a non-fork: expected 400, got ${fake.statusCode}`);
+
+      // 6. Nobody else can quit your claim.
+      expectStatus(await api('POST', `/api/commitments/${claimA.body.commitment.id}/withdraw`, b), 403, 'Quit someone else\'s claim');
+      console.log('✓ 6. Quitting another person\'s claim is refused (403)');
+
+      // 7. Signed-out visitors cannot claim.
+      expectStatus(await api('POST', `/api/projects/${grave.id}/commit`, null), 401, 'Signed-out claim');
+      console.log('✓ 7. Claiming while signed out is refused (401)');
+    } finally {
+      for (const [id, cookie] of commitIds) await api('POST', `/api/commitments/${id}/withdraw`, cookie);
     }
+    const after = await prisma.project.findUnique({ where: { id: grave.id } });
+    const left = await prisma.commitment.count({ where: { projectId: grave.id, status: 'ACTIVE' } });
+    if (after.status !== 'LISTED' || left !== 0) throw new Error(`After quitting, expected LISTED with 0 claims, got ${after.status} / ${left}`);
+    if (await creditsOf(userA.id) !== startA) throw new Error('Quitting did not return the full pledge');
+    console.log('✓ 8. Both quit: full pledges returned, grave back to LISTED');
+  }));
+}
 
-    // 6. Someone else cannot withdraw your claim.
-    expectStatus(await api('POST', `/api/commitments/${claimA.body.commitment.id}/withdraw`, b), 403, 'Withdraw someone else\'s claim');
-    console.log('✓ 6. Withdrawing another person\'s claim is refused (403)');
-  } finally {
-    // 7. Both leave; the grave goes back to LISTED with no penalty.
-    for (const [id, cookie] of commitIds) {
-      await api('POST', `/api/commitments/${id}/withdraw`, cookie);
-    }
+async function runSection7_ListingRules() {
+  console.log('\n======================================================');
+  console.log(' SECTION 7: LISTING RULES & CLOSED BACK DOORS (HTTP)');
+  console.log('======================================================');
+
+  if (!(await serverIsUp())) {
+    console.log('ℹ️ Server not running on http://localhost:3000. Skipping.');
+    return;
   }
-  const after = await prisma.project.findUnique({ where: { id: grave.id } });
-  const left = await prisma.commitment.count({ where: { projectId: grave.id, status: 'ACTIVE' } });
-  if (after.status !== 'LISTED' || left !== 0) throw new Error(`After leaving, expected LISTED with 0 active claims, got ${after.status} / ${left}`);
-  console.log('✓ 7. Both left for free; the grave is back to LISTED');
+  const cookie = await loginAs('sarah.chen@campus.edu');
+  const good = {
+    githubRepoUrl: 'https://github.com/moment/moment',
+    title: 'Test listing',
+    description: 'A description that is long enough to pass.',
+    doneWhen: 'It builds and the tests pass on Node 20.',
+    claimDays: 30,
+    timeEstimate: 'WEEKS',
+    category: 'Web'
+  };
+
+  expectStatus(await api('POST', '/api/projects', null, good), 401, 'List while signed out');
+  console.log('✓ 1. Listing while signed out is refused (401)');
+
+  expectStatus(await api('POST', '/api/projects', cookie, { ...good, githubRepoUrl: '' }), 400, 'List without a repo');
+  console.log('✓ 2. A listing without a GitHub repository is refused (400)');
+
+  expectStatus(await api('POST', '/api/projects', cookie, { ...good, githubRepoUrl: 'https://example.com/x' }), 400, 'List a non-GitHub link');
+  console.log('✓ 3. A link that is not a GitHub repository is refused (400)');
+
+  const noDone = await api('POST', '/api/projects', cookie, { ...good, doneWhen: '' });
+  expectStatus(noDone, 400, 'List without "done when"');
+  if (!/revived/i.test(noDone.body.error)) throw new Error(`Wrong reason: ${noDone.body.error}`);
+  console.log(`✓ 4. A listing without "Done when" is refused (400): "${noDone.body.error}"`);
+
+  const badDays = await api('POST', '/api/projects', cookie, { ...good, claimDays: 5 });
+  expectStatus(badDays, 400, 'List with a made-up claim length');
+  if (!/claim length/i.test(badDays.body.error)) throw new Error(`Wrong reason: ${badDays.body.error}`);
+  console.log(`✓ 5. A claim length other than 14/30/60 days is refused (400): "${badDays.body.error}"`);
+
+  const fork = await api('POST', '/api/projects', cookie, { ...good, githubRepoUrl: 'https://github.com/example-owner/repo-that-does-not-exist' });
+  if (fork.statusCode !== 400) throw new Error(`Unknown repo: expected 400, got ${fork.statusCode}`);
+  console.log(`✓ 6. A repository GitHub can't find is refused (400): "${fork.body.error}"`);
+
+  // The old stake and milestone mutations must not exist on the GraphQL endpoint.
+  const gql = await api('POST', '/api/graphql', cookie, { query: 'mutation { completeMilestone(milestoneId: "x") { id } }' });
+  const msg = JSON.stringify(gql.body);
+  if (!/Cannot query field/.test(msg)) throw new Error(`GraphQL write mutation still answers: ${msg.slice(0, 200)}`);
+  console.log('✓ 7. GraphQL write mutations are gone: claims only go through the checked API');
 }
 
 async function main() {
@@ -667,11 +560,12 @@ async function main() {
 
   try {
     await runSection1_Protocol();
-    await runSection2_EdgeCases();
+    await runSection2_ClaimEngine();
     await runSection3_HTTPAuth();
     await runSection4_GitHubOAuth();
     await runSection5_LegalCheckAndAutopsy();
     await runSection6_CommunityRevival();
+    await runSection7_ListingRules();
 
     console.log('\n========================================================');
     console.log(' 🎉 ALL TESTS PASSED!');

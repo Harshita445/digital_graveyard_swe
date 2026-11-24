@@ -2,7 +2,11 @@ import prisma from '../../../lib/prisma';
 import { parseSession } from '../../../lib/auth';
 import { enrichProject } from '../../../lib/mockFallback';
 import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest } from '../../../lib/githubIntelligence';
-import { classifyRepoForListing } from '../../../lib/listing';
+import { classifyRepoForListing, validateListingDetails } from '../../../lib/listing';
+import { PLEDGE } from '../../../lib/claimRules';
+
+export const config = { maxDuration: 60 };
+const LISTINGS_PER_DAY = 10;
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -80,80 +84,68 @@ export default async function handler(req, res) {
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) return res.status(401).json({ error: 'User not found' });
-      if (user.banned) {
-        return res.status(403).json({ error: 'Your account is restricted due to ghost strikes (3+ strikes).' });
+
+      // Same daily limit as the quick suggest box (both count every listing you made today).
+      const recent = await prisma.project.count({
+        where: { ownerId: userId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } }
+      });
+      if (recent >= LISTINGS_PER_DAY) {
+        return res.status(429).json({ error: `You can list up to ${LISTINGS_PER_DAY} repositories a day. Try again tomorrow.` });
       }
 
-      const {
-        title,
-        description,
-        stakeRequired = 100,
-        techTags = '[]',
-        category = 'Web',
-        completion = 20,
-        milestoneMode = false,
-        fileName = 'project_archive.zip',
-        fileUrl = '/downloads/source.zip',
-        milestones = [],
-        githubRepoUrl = ''
-      } = req.body;
-
-      if (!title || !description) {
-        return res.status(400).json({ error: 'Title and description are required' });
+      // Every listing needs a public GitHub repo: commits on forks of it are how claims are checked.
+      const githubRepoUrl = String(req.body?.githubRepoUrl || '').trim();
+      const parsedRepo = parseGitHubRepositoryUrl(githubRepoUrl);
+      if (!parsedRepo) {
+        return res.status(400).json({ error: 'A GitHub repository URL is required, like https://github.com/owner/repository' });
       }
 
-      const parsedRepo = githubRepoUrl ? parseGitHubRepositoryUrl(githubRepoUrl) : null;
-      if (githubRepoUrl && !parsedRepo) {
-        return res.status(400).json({ error: 'GitHub repository URL must look like https://github.com/owner/repository' });
+      // Check the form before spending any GitHub calls on it.
+      const details = validateListingDetails(req.body, 'DONATED');
+      if (details.error) return res.status(400).json({ error: details.error });
+
+      const duplicate = await prisma.project.findFirst({ where: { githubRepoUrl: parsedRepo.url } });
+      if (duplicate) {
+        return res.status(409).json({ error: 'This repository is already in the graveyard.', projectId: duplicate.id });
       }
 
-      // Permission check — the platform only lists code it is allowed to list:
-      //  1. you own the repo (your GitHub login is the repo owner)  -> DONATED
-      //  2. or the repo is abandoned AND its license already allows forking -> OPEN_GRAVE
-      let source = 'DONATED';
-      if (parsedRepo) {
-        const duplicate = await prisma.project.findFirst({ where: { githubRepoUrl: parsedRepo.url } });
-        if (duplicate) {
-          return res.status(409).json({ error: 'This repository is already in the graveyard.', projectId: duplicate.id });
-        }
-
-        const repo = await githubRest(`/repos/${parsedRepo.owner}/${parsedRepo.name}`).catch(() => null);
-        if (!repo || repo.private) {
-          return res.status(400).json({ error: 'Could not find that repository on GitHub. Is it public?' });
-        }
-        const verdict = classifyRepoForListing(repo, user.githubUsername);
-        if (!verdict.ok) {
-          const reasons = [...verdict.reasons];
-          if (!user.githubUsername) reasons.push('if it is yours, connect your GitHub account to prove you own it');
-          return res.status(403).json({
-            error: `You can't list ${repo.full_name}: ${reasons.join('; ')}. You can list repos you own, or abandoned repos whose license allows forking.`
-          });
-        }
-        source = verdict.source;
+      const repo = await githubRest(`/repos/${parsedRepo.owner}/${parsedRepo.name}`).catch(() => null);
+      if (!repo || repo.private) {
+        return res.status(400).json({ error: 'Could not find that repository on GitHub. Is it public?' });
+      }
+      // Owning a fork doesn't make you the owner of the code inside it.
+      if (repo.fork) {
+        return res.status(400).json({ error: `${repo.full_name} is a fork. List the original (${repo.parent?.full_name || 'its parent'}) instead.` });
       }
 
-      const normalizedCategory = category === 'Cybersecurity' ? 'Security' : category;
+      // Permission check: the platform only lists code it is allowed to list.
+      //  1. you own the repo (your GitHub login is the repo owner)          -> DONATED
+      //  2. or it is abandoned AND its license already allows forking      -> OPEN_GRAVE
+      const verdict = classifyRepoForListing(repo, user.githubUsername);
+      if (!verdict.ok) {
+        const reasons = [...verdict.reasons];
+        if (!user.githubUsername) reasons.push('if it is yours, connect your GitHub account to prove you own it');
+        return res.status(403).json({
+          error: `You can't list ${repo.full_name}: ${reasons.join('; ')}. You can list repos you own, or abandoned repos whose license allows forking.`
+        });
+      }
+      const source = verdict.source;
+
+      // Only the owner of a donated repo can offer to answer questions.
+      details.data.ownerAvailable = source === 'DONATED' && details.data.ownerAvailable;
 
       let project = await prisma.project.create({
         data: {
+          ...details.data,
           ownerId: userId,
-          title,
-          description,
-          stakeRequired: source === 'OPEN_GRAVE' ? 0 : Number(stakeRequired),
-          techTags: typeof techTags === 'string' ? techTags : JSON.stringify(techTags),
-          category: normalizedCategory,
           source,
-          handoffNote: req.body.handoffNote ? String(req.body.handoffNote).slice(0, 4000) : null,
-          completion: Number(completion),
-          milestoneMode: Boolean(milestoneMode),
-          fileName,
-          fileUrl,
-          githubRepoUrl: parsedRepo ? parsedRepo.url : null,
+          stakeRequired: PLEDGE,
+          githubRepoUrl: parsedRepo.url,
           status: 'LISTED'
         }
       });
 
-      if (githubRepoUrl && process.env.GITHUB_TOKEN) {
+      if (process.env.GITHUB_TOKEN) {
         try {
           const intelligence = await analyzeGitHubRepository(githubRepoUrl);
           project = await prisma.project.update({ where: { id: project.id }, data: intelligence });

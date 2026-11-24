@@ -19,7 +19,7 @@ export default function ProvenanceTimeline({ nodes = [] }) {
       eventType: 'listed',
       actorName: 'Curator',
       actorRole: 'Owner',
-      note: 'Archived to Digital Graveyard with open escrow stake requirement.'
+      note: 'Listed in Digital Graveyard for revival.'
     }
   ];
 

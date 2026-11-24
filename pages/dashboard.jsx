@@ -93,7 +93,7 @@ export default function Dashboard() {
             Authentication Required
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, margin: '0 0 24px', lineHeight: 1.5 }}>
-            Access to your listed repositories, active escrow stakes, and immutable ledger requires an authenticated session.
+            Your listed projects, claims, pledges and credit ledger need you to be signed in.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Link href="/login" className="btn btn-primary btn-block" style={{ height: 42, borderRadius: '10px', fontSize: 14.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -107,9 +107,9 @@ export default function Dashboard() {
 
   const ownedProjects = userData?.ownedProjects || [];
   const commitments = userData?.commitments || [];
-  const activeCommitments = commitments.filter(c => ['PENDING_APPROVAL', 'ACTIVE', 'SUBMITTED'].includes(c.status));
+  const activeCommitments = commitments.filter(c => ['PENDING_APPROVAL', 'ACTIVE'].includes(c.status));
+  const pledged = activeCommitments.reduce((sum, c) => sum + (c.stakeLocked || 0), 0);
   const pendingIncoming = ownedProjects.filter(p => p.status === 'PENDING_APPROVAL');
-  const pendingVerifications = ownedProjects.filter(p => p.status === 'SUBMITTED');
 
   const navTabs = [
     { id: 'overview', label: 'Overview', icon: 'grid' },
@@ -213,7 +213,9 @@ export default function Dashboard() {
                 <div className="font-display" style={{ fontSize: 26, fontWeight: 800, color: 'var(--text)' }}>
                   {currentUser.credits} cr
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginTop: 4 }}>Available Credits</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginTop: 4 }}>
+                  Available Credits{pledged > 0 ? ` (+${pledged} pledged)` : ''}
+                </div>
               </div>
 
               <div className="card" style={{ padding: 20, background: '#FFFFFF' }}>
@@ -231,7 +233,7 @@ export default function Dashboard() {
                 <div className="font-display" style={{ fontSize: 26, fontWeight: 800, color: currentUser.ghostStrikes > 0 ? '#9E1C1C' : 'var(--text)' }}>
                   {currentUser.ghostStrikes} / 3
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginTop: 4 }}>Ghost Strikes (3 = Ban)</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-dim)', marginTop: 4 }}>Missed claims (3 = no more claims)</div>
               </div>
 
               <div className="card" style={{ padding: 20, background: '#FFFFFF' }}>
@@ -264,40 +266,11 @@ export default function Dashboard() {
                     Action Required: {pendingIncoming.length} Pending Claim Request
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    An anonymous builder wants to claim your project. Review and approve to lock their stake.
+                    Someone wants to claim your project. Approve or decline within 3 days, or the request expires and their pledge goes back.
                   </div>
                 </div>
                 <button className="btn btn-primary btn-sm" onClick={() => setTab('owned')}>
                   Review
-                </button>
-              </div>
-            )}
-
-            {pendingVerifications.length > 0 && (
-              <div
-                className="surface2"
-                style={{
-                  padding: 18,
-                  marginBottom: 20,
-                  border: '2px solid var(--border)',
-                  borderLeft: '6px solid #1E6B3E',
-                  borderRadius: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  boxShadow: 'var(--shadow-sketch-sm)'
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 14.5, color: '#1E6B3E', fontFamily: 'var(--font-display)' }}>
-                    Action Required: Deliverable Ready for Review
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                    A builder has submitted completed code. Verify and approve to release escrow.
-                  </div>
-                </div>
-                <button className="btn btn-primary btn-sm" onClick={() => setTab('owned')}>
-                  Verify Work
                 </button>
               </div>
             )}
@@ -368,7 +341,7 @@ export default function Dashboard() {
                             <span className={`badge-sketch badge-${p.status}`}>{p.status}</span>
                           </div>
                           <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 5 }}>
-                            {p.category} · {p.completion}% complete · <strong>{p.stakeRequired} credits</strong> required stake
+                            {p.category} · {p.source === 'OPEN_GRAVE' ? 'Open grave' : 'Donated'} · {p.claimDays || 30}-day claims{p.bounty > 0 ? <> · <strong>{p.bounty} cr bounty</strong></> : null}
                           </div>
                         </div>
 
@@ -389,7 +362,6 @@ export default function Dashboard() {
                         >
                           Active Builder: <strong style={{ color: 'var(--text)' }}>{active.taker?.alias}</strong> ({active.taker?.reputation} rep)
                           {active.status === 'PENDING_APPROVAL' && <span style={{ color: '#9E5D00', fontWeight: 700, marginLeft: 8 }}>(Pending your approval)</span>}
-                          {active.status === 'SUBMITTED' && <span style={{ color: '#1E6B3E', fontWeight: 700, marginLeft: 8 }}>(Deliverable submitted for review!)</span>}
                         </div>
                       )}
                     </div>
@@ -408,7 +380,7 @@ export default function Dashboard() {
                 My Claims & Work in Progress
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '3px 0 0' }}>
-                Projects you are reviving. Open graves need no stake; donated projects lock a stake until the owner approves.
+                Every claim holds a 150-credit pledge. Show a commit within 7 days and finish before the deadline to get it back with a reward, or quit any time for a full refund.
               </p>
             </div>
 
@@ -443,17 +415,20 @@ export default function Dashboard() {
                         </div>
                         <div style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 5 }}>
                           {c.project?.source === 'OPEN_GRAVE'
-                            ? <>Open grave · originally by @{c.project?.githubRepoOwner || 'unknown'} · No stake</>
-                            : <>Owner: {c.project?.owner?.alias} · Stake Locked: <strong style={{ color: 'var(--text)' }}>{c.stakeLocked} cr</strong></>}
+                            ? <>Open grave · originally by @{c.project?.githubRepoOwner || 'unknown'}</>
+                            : <>Donated by {c.project?.owner?.alias}</>}
+                          {c.stakeLocked > 0 && ['PENDING_APPROVAL', 'ACTIVE'].includes(c.status) && (
+                            <> · Pledged: <strong style={{ color: 'var(--text)' }}>{c.stakeLocked} cr</strong></>
+                          )}
                         </div>
                       </div>
 
                       <Link href={`/project/${c.projectId}`} className="btn btn-secondary btn-sm">
-                        View & Submit Work →
+                        Open Claim →
                       </Link>
                     </div>
 
-                    {c.ghostDeadlineAt && c.status === 'ACTIVE' && (
+                    {c.status === 'ACTIVE' && (c.proofDueAt || c.ghostDeadlineAt) && (
                       <div
                         style={{
                           marginTop: 14,
@@ -463,7 +438,13 @@ export default function Dashboard() {
                           color: 'var(--text-muted)'
                         }}
                       >
-                        ⏱️ Ghost Timeout Deadline: <strong>{new Date(c.ghostDeadlineAt).toLocaleDateString()}</strong> (submit your fork before this date or the claim is released)
+                        {c.proofDueAt && !c.proofAt && (
+                          <div>⏱️ First commit due: <strong>{new Date(c.proofDueAt).toLocaleDateString()}</strong> (push a commit of your own to a fork, or quit before then)</div>
+                        )}
+                        {c.proofAt && <div>✅ First commit seen {new Date(c.proofAt).toLocaleDateString()}</div>}
+                        {c.ghostDeadlineAt && (
+                          <div>🏁 Finish by: <strong>{new Date(c.ghostDeadlineAt).toLocaleDateString()}</strong> (3 new commits, one of them yours)</div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -481,7 +462,7 @@ export default function Dashboard() {
                 Append-Only Credit Ledger
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: 13.5, margin: '3px 0 0' }}>
-                Every credit change on your account: sign-up bonus, stakes, refunds, rewards and reputation updates. Entries are only ever added, never edited.
+                Every credit change on your account: sign-up bonus, pledges, refunds, rewards, bounties and reputation updates. Entries are only ever added, never edited.
               </p>
             </div>
 
@@ -624,7 +605,7 @@ function LedgerTable({ entries = [] }) {
         </div>
         <div style={{ fontWeight: 700, fontSize: 14 }}>No ledger transactions recorded yet.</div>
         <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginTop: 4 }}>
-          Every stake lock, refund, penalty, and reward will be immutably recorded here.
+          Every pledge, refund, reward and penalty is recorded here.
         </div>
       </div>
     );
