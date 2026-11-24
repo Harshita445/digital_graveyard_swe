@@ -3,12 +3,10 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import ProjectCard from '../components/ProjectCard';
-import { useApp } from '../context/AppContext';
 import { getLocalProjects, CATEGORIES as BASE_CATEGORIES } from '../lib/mockFallback';
 import {
   Compass,
   Filter,
-  Sparkles,
   Search,
   SlidersHorizontal,
   X
@@ -30,7 +28,6 @@ const SOURCES = [
 
 export default function Browse() {
   const router = useRouter();
-  const { campusMode } = useApp();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,16 +68,6 @@ export default function Browse() {
 
   const filteredProjects = useMemo(() => {
     let list = [...projects];
-
-    // Campus mode filter
-    if (campusMode) {
-      list = list.filter(
-        (p) =>
-          p.district === 'Campus Graveyard' ||
-          p.category === 'Education' ||
-          (p.owner && p.owner.email && p.owner.email.endsWith('.edu'))
-      );
-    }
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -127,7 +114,7 @@ export default function Browse() {
     }
 
     return list;
-  }, [projects, search, category, status, source, maxStake, sort, campusMode]);
+  }, [projects, search, category, status, source, maxStake, sort]);
 
   const FilterSidebar = (
     <div
@@ -302,7 +289,7 @@ export default function Browse() {
         >
           <div>
             <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.15em', color: 'rgba(17, 17, 17, 0.6)', display: 'block' }}>
-              {campusMode ? 'CAMPUS GRAVEYARD ARCHIVE' : 'OPEN PRESERVATION CATALOG'}
+              OPEN PRESERVATION CATALOG
             </span>
             <h1 style={{ fontFamily: 'var(--font-hand)', fontSize: 38, fontWeight: 700, margin: '2px 0 0', color: 'var(--color-ink)' }}>
               ARCHIVAL COLLECTIONS
@@ -428,7 +415,7 @@ export default function Browse() {
                   No preserved artifacts found
                 </h3>
                 <p style={{ fontSize: 13, fontFamily: 'var(--font-mono)', margin: 0 }}>
-                  Try adjusting your search query, clearing filters, or switching off Campus mode.
+                  Try adjusting your search query, or clearing filters.
                 </p>
               </div>
             ) : (

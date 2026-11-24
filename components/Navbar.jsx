@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Search,
   User,
-  Sparkles,
   X,
   ArrowRight,
   Shield,
@@ -19,7 +18,7 @@ import {
 
 export default function Navbar() {
   const router = useRouter();
-  const { currentUser, logout, campusMode, setCampusMode } = useApp();
+  const { currentUser, logout } = useApp();
   const [personaOpen, setPersonaOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -81,7 +80,7 @@ export default function Navbar() {
           gap: 16
         }}
       >
-        {/* Brand & Campus Scope */}
+        {/* Brand */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Link
             href="/"
@@ -134,29 +133,10 @@ export default function Navbar() {
                   marginTop: -2
                 }}
               >
-                {campusMode ? 'Campus Edition (.edu)' : 'Open Archive'}
+                Open Archive
               </span>
             </div>
           </Link>
-
-          {/* Campus Toggle Button */}
-          <button
-            onClick={() => setCampusMode(!campusMode)}
-            className="sketch-btn hide-mobile"
-            style={{
-              padding: '3px 9px',
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              gap: 5,
-              backgroundColor: campusMode ? 'var(--color-ink)' : 'var(--color-paper)',
-              color: campusMode ? 'var(--color-paper)' : 'var(--color-ink)',
-              borderRadius: 6
-            }}
-            title="Toggle between Campus (.edu) and Global Graveyard archive"
-          >
-            <Sparkles style={{ width: 12, height: 12 }} />
-            <span>{campusMode ? 'Campus ON' : 'Campus'}</span>
-          </button>
         </div>
 
         {/* Center Nav Links - Streamlined Desktop */}

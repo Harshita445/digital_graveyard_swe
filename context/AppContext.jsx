@@ -208,9 +208,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Campus Scope state
-  const [campusMode, setCampusMode] = useState(false);
-
   // 6. Refresh user metrics (balance, reputation, strikes)
   const refreshUser = async () => {
     if (!currentUser) return;
@@ -240,9 +237,7 @@ export function AppProvider({ children }) {
         signup,
         logout,
         switchPersona,
-        refreshUser,
-        campusMode,
-        setCampusMode
+        refreshUser
       }}
     >
       {children}
