@@ -3,7 +3,9 @@
  *
  * The production database URL is a Vercel "sensitive" variable that can't be
  * downloaded, so the build (which can read it) prepares the database itself:
- *   1. apply the Prisma schema (additive `db push`, never --accept-data-loss)
+ *   1. apply the Prisma schema additively: only the changes the app needs. Tables the app
+ *      doesn't manage (e.g. Neon's sample table) are left alone, and any other change that
+ *      would drop something stops the deploy instead of losing data.
  *   2. create the demo personas if there are no users yet
  *   3. add real open graves from GitHub if there are fewer than 20
  *
@@ -11,6 +13,9 @@
  * (Unlike prisma/seed.js, which wipes all tables — never run that against production.)
  */
 import { spawnSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 
@@ -32,9 +37,54 @@ const run = (command, args, env = {}) => {
 
 // Schema changes go through the direct (unpooled) connection when Neon provides one.
 const directUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
-if (!run('npx', ['prisma', 'db', 'push', '--skip-generate'], { DATABASE_URL: directUrl })) {
-  console.error('[db-setup] prisma db push failed (it refuses changes that would lose data).');
-  process.exit(1);
+if (!applySchema(directUrl)) process.exit(1);
+
+// Works out what SQL would bring the database up to prisma/schema.prisma and applies only the
+// safe part. `prisma db push` can't do this: it insists on dropping tables it doesn't know.
+function applySchema(url) {
+  // No shell on Linux (Vercel), so the URL's characters are never interpreted; Windows needs one for npx.
+  const shell = process.platform === 'win32';
+  const arg = value => (shell ? JSON.stringify(value) : value);
+  const prisma = args => spawnSync('npx', ['prisma', ...args], { shell, encoding: 'utf8', env: process.env });
+
+  const diff = prisma(['migrate', 'diff', '--from-url', arg(url), '--to-schema-datamodel', 'prisma/schema.prisma', '--script']);
+  if (diff.status !== 0) {
+    console.error('[db-setup] Could not compare the database with the schema:', diff.stderr);
+    return false;
+  }
+  const managed = new Set([...fs.readFileSync('prisma/schema.prisma', 'utf8').matchAll(/^model\s+(\w+)/gm)].map(m => m[1]));
+  const statements = diff.stdout
+    .split(/;\s*(?:\r?\n|$)/)
+    .map(sql => sql.split(/\r?\n/).filter(line => !line.trim().startsWith('--')).join('\n').trim())
+    .filter(Boolean);
+
+  const keep = [];
+  for (const sql of statements) {
+    const droppedTable = sql.match(/^DROP TABLE "([^"]+)"$/i)?.[1];
+    if (droppedTable && !managed.has(droppedTable)) {
+      console.log(`[db-setup] Leaving table "${droppedTable}" alone: the app doesn't manage it.`);
+      continue;
+    }
+    if (/\bDROP\b/i.test(sql)) {
+      console.error(`[db-setup] Refusing a change that would delete data:\n  ${sql}\nApply it by hand if it is really intended.`);
+      return false;
+    }
+    keep.push(sql);
+  }
+  if (keep.length === 0) {
+    console.log('[db-setup] Database already matches the schema.');
+    return true;
+  }
+  const file = path.join(os.tmpdir(), `schema-${Date.now()}.sql`);
+  fs.writeFileSync(file, keep.map(sql => `${sql};`).join('\n\n'));
+  console.log(`[db-setup] Applying ${keep.length} schema change(s):\n${keep.map(sql => `  ${sql.split('\n')[0]}`).join('\n')}`);
+  const result = prisma(['db', 'execute', '--file', arg(file), '--url', arg(url)]);
+  process.stdout.write(result.stdout || '');
+  process.stderr.write(result.stderr || '');
+  const ok = result.status === 0;
+  fs.rmSync(file, { force: true });
+  if (!ok) console.error('[db-setup] Applying the schema changes failed.');
+  return ok;
 }
 
 const PERSONAS = [
