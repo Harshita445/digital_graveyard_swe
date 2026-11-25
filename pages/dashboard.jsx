@@ -119,7 +119,7 @@ export default function Dashboard() {
 
   const navTabs = [
     { id: 'overview', label: 'Overview', icon: 'grid' },
-    { id: 'owned', label: `My Listed Code (${ownedProjects.length})`, icon: 'layers', badge: pendingIncoming.length + pendingVerifications.length },
+    { id: 'owned', label: `My Listed Code (${ownedProjects.length})`, icon: 'layers', badge: pendingIncoming.length },
     { id: 'commitments', label: `My Claims & Work (${commitments.length})`, icon: 'lock', badge: activeCommitments.length },
     { id: 'ledger', label: `Credit Ledger (${ledger.length})`, icon: 'activity' },
     { id: 'anonymity', label: 'Anonymity & Account', icon: 'shield' }
