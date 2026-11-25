@@ -1,5 +1,5 @@
 import prisma from '../../../lib/prisma';
-import { parseSession } from '../../../lib/auth';
+import { requireUser } from '../../../lib/session';
 import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest } from '../../../lib/githubIntelligence';
 import { classifyRepoForListing, guessCategory } from '../../../lib/listing';
 import { PLEDGE, DEFAULT_DONE_WHEN, DEFAULT_CLAIM_DAYS } from '../../../lib/claimRules';
@@ -19,8 +19,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const userId = parseSession(req);
-    if (!userId) return res.status(401).json({ error: 'Sign in to suggest a repository.' });
+    const me = await requireUser(req, res, { write: true });
+    if (!me) return;
+    const userId = me.id;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(401).json({ error: 'User not found' });

@@ -107,15 +107,17 @@ async function runSection1_Protocol() {
 
 async function runSection2_ClaimEngine() {
   console.log('\n======================================================');
-  console.log(' SECTION 2: CLAIM ENGINE (pledges, checkpoints, payouts)');
+  console.log(' SECTION 2: CLAIM ENGINE & SESSIONS');
   console.log('======================================================');
-  // The claim rules are tested in their own script, which imports the engine as ES modules.
+  // These are tested in their own scripts, which import the engine as ES modules.
   const { spawnSync } = require('child_process');
-  const run = spawnSync(process.execPath, ['--no-warnings', path.join(__dirname, 'test-claims.mjs')], {
-    env: process.env, encoding: 'utf8'
-  });
-  process.stdout.write(run.stdout || '');
-  if (run.status !== 0) throw new Error(`Claim engine tests failed:\n${run.stderr || ''}`);
+  for (const script of ['test-claims.mjs', 'test-sessions.mjs']) {
+    const run = spawnSync(process.execPath, ['--no-warnings', path.join(__dirname, script)], {
+      env: process.env, encoding: 'utf8'
+    });
+    process.stdout.write(run.stdout || '');
+    if (run.status !== 0) throw new Error(`${script} failed:\n${run.stderr || ''}`);
+  }
 }
 
 async function runSection3_HTTPAuth() {

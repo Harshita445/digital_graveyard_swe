@@ -1,5 +1,5 @@
 import prisma from '../../../lib/prisma';
-import { parseSession } from '../../../lib/auth';
+import { requireUser } from '../../../lib/session';
 import { enrichProject } from '../../../lib/mockFallback';
 import { analyzeGitHubRepository, parseGitHubRepositoryUrl, githubRest } from '../../../lib/githubIntelligence';
 import { classifyRepoForListing, validateListingDetails } from '../../../lib/listing';
@@ -77,10 +77,9 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     try {
-      const userId = parseSession(req);
-      if (!userId) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
+      const me = await requireUser(req, res, { write: true });
+      if (!me) return;
+      const userId = me.id;
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) return res.status(401).json({ error: 'User not found' });

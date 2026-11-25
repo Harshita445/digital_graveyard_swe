@@ -18,6 +18,7 @@ export default function ProjectDetails({ projectId }) {
   const [activeCommitment, setActiveCommitment] = useState(null);
   const [userRole, setUserRole] = useState('GUEST');
   const [revivers, setRevivers] = useState([]);
+  const [requester, setRequester] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -44,6 +45,7 @@ export default function ProjectDetails({ projectId }) {
         setActiveCommitment(data.activeCommitment);
         setUserRole(data.userRole);
         setRevivers(data.revivers || []);
+        setRequester(data.requester || null);
         setLoading(false);
         return;
       }
@@ -76,6 +78,10 @@ export default function ProjectDetails({ projectId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 401) {
+          await refreshUser(); // signed out elsewhere or GitHub access revoked
+          return null;
+        }
         addToast(data.error || 'That did not work. Please try again.', 'error');
         return null;
       }
@@ -117,6 +123,7 @@ export default function ProjectDetails({ projectId }) {
         headers: { 'x-user-id': currentUser.id }
       });
       const data = await res.json();
+      if (res.status === 401) { await refreshUser(); return; }
       if (!res.ok) throw new Error(data.error || 'Repository analysis failed');
       setProject(data.project);
       addToast('Live GitHub intelligence refreshed.', 'success');
@@ -583,8 +590,9 @@ export default function ProjectDetails({ projectId }) {
                 {isPending && activeCommitment && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                      <strong>{activeCommitment.taker?.alias}</strong> ({activeCommitment.taker?.reputation} rep, {activeCommitment.taker?.ghostStrikes || 0} missed claims) wants to claim it.
+                      <strong>{activeCommitment.taker?.alias}</strong> wants to take this over. Look at their GitHub before you decide:
                     </div>
+                    <RequesterCard requester={requester} />
                     <p style={{ fontSize: 12, color: 'var(--text-dim)', margin: 0 }}>
                       They have pledged {activeCommitment.stakeLocked} credits. Answer by {fmtDate(activeCommitment.requestExpiresAt)} or the request expires and their pledge goes back.
                     </p>
@@ -600,6 +608,7 @@ export default function ProjectDetails({ projectId }) {
                 {isActive && (
                   <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
                     <strong>{activeCommitment.taker?.alias}</strong> is reviving it.
+                    <RequesterCard requester={requester} />
                     <ClaimTimeline commitment={activeCommitment} />
                   </div>
                 )}
@@ -682,7 +691,7 @@ export default function ProjectDetails({ projectId }) {
                           : workingCount > 0
                             ? `${workingCount} ${workingCount === 1 ? 'person is' : 'people are'} reviving this. Anyone can join.`
                             : 'Anyone can claim it. The license already allows forking.')
-                        : 'The owner picks one person to revive it. Request it and they have 3 days to answer.'}
+                        : 'The owner picks one person to revive it. Request it and they have 3 days to answer. They will see your GitHub profile and your record here before deciding.'}
                     </div>
                     <div className="surface2" style={{ padding: 14, borderRadius: 10, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <Row label="Pledge (returned when you finish or quit)" value={`${PLEDGE} cr`} />
@@ -819,6 +828,54 @@ function Row({ label, value, strong }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
       <span>{label}</span>
       <strong style={strong ? { color: 'var(--accent-2)' } : undefined}>{value}</strong>
+    </div>
+  );
+}
+
+// What a donated project's owner sees about the person asking for it, before approving.
+function RequesterCard({ requester }) {
+  if (!requester) return null;
+  const gh = requester.github;
+  const r = requester.record;
+  const year = d => (d ? new Date(d).getFullYear() : '—');
+  return (
+    <div className="surface2" style={{ padding: 12, borderRadius: 10, fontSize: 12.5, lineHeight: 1.55, display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, overflowWrap: 'anywhere' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {gh?.avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={gh.avatarUrl} alt="" width={36} height={36} style={{ borderRadius: '50%', border: '2px solid var(--border)', flexShrink: 0 }} />
+        )}
+        <div style={{ minWidth: 0 }}>
+          {requester.githubUrl ? (
+            <a href={requester.githubUrl} target="_blank" rel="noreferrer" style={{ fontWeight: 800 }}>@{requester.githubUsername} ↗</a>
+          ) : <strong>{requester.alias}</strong>}
+          {gh?.name && <div style={{ color: 'var(--text-dim)' }}>{gh.name}</div>}
+        </div>
+      </div>
+      {gh?.bio && <div style={{ color: 'var(--text-muted)' }}>{gh.bio}</div>}
+      {gh ? (
+        <div style={{ color: 'var(--text-muted)' }}>
+          On GitHub since {year(gh.joined)} · {gh.publicRepos} public repos · {gh.followers} followers
+        </div>
+      ) : requester.githubUrl && (
+        <div style={{ color: 'var(--text-dim)' }}>Couldn&apos;t load GitHub details right now. Open their profile to look.</div>
+      )}
+      {gh?.recentRepos?.length > 0 && (
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>Recently worked on</div>
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {gh.recentRepos.map(repo => (
+              <li key={repo.url}>
+                <a href={repo.url} target="_blank" rel="noreferrer">{repo.name}</a>
+                {repo.language ? ` · ${repo.language}` : ''}{repo.stars ? ` · ★${repo.stars}` : ''} · {fmtDate(repo.pushedAt)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 6, color: 'var(--text-muted)' }}>
+        <strong>Here:</strong> {r.revived} revived · {r.ghosted} disappeared · {r.quit} quit · {r.activeClaims} active now · {r.reputation} rep
+      </div>
     </div>
   );
 }

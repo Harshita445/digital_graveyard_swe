@@ -6,13 +6,21 @@ import {
   verifyPassword,
   sanitizeUser,
   createSessionToken,
-  parseSession,
   serializeSessionCookie,
   serializeClearCookie,
   parseCookieHeader,
-  isDemoPersona
+  isDemoPersona,
+  encryptToken
 } from '../../../lib/auth';
 import { recordLedgerEntry } from '../../../lib/ledger';
+import { getSessionUser, SessionError, signOutEverywhere, revokeGithubToken } from '../../../lib/session';
+
+// The live site signs in with GitHub only. Email/password and the shared demo personas
+// (whose passwords are public in this repo) work only on local and test servers.
+const LOCAL_LOGINS = process.env.NODE_ENV !== 'production';
+const githubOnly = res => res.status(404).json({ error: 'Sign in with GitHub.' });
+
+const clearUserIdCookie = 'graveyard_user_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT';
 
 /**
  * Unified Authentication API Route Handler
@@ -51,6 +59,7 @@ export default async function handler(req, res) {
 
 // 1. POST /api/auth/login
 async function handleLogin(req, res) {
+  if (!LOCAL_LOGINS) return githubOnly(res);
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -75,15 +84,8 @@ async function handleLogin(req, res) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    if (user.banned) {
-      return res.status(403).json({ error: 'This account has been banned due to excessive ghost strikes.' });
-    }
-
-    const token = createSessionToken(user.id, user.alias);
-    res.setHeader('Set-Cookie', [
-      serializeSessionCookie(token),
-      `graveyard_user_id=${user.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
-    ]);
+    const token = createSessionToken(user.id, user.alias, user.sessionVersion);
+    res.setHeader('Set-Cookie', serializeSessionCookie(token));
 
     return res.status(200).json({
       message: 'Logged in successfully',
@@ -98,6 +100,7 @@ async function handleLogin(req, res) {
 
 // 2. POST /api/auth/signup
 async function handleSignup(req, res) {
+  if (!LOCAL_LOGINS) return githubOnly(res);
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -153,11 +156,8 @@ async function handleSignup(req, res) {
       where: { id: user.id }
     });
 
-    const token = createSessionToken(user.id, user.alias);
-    res.setHeader('Set-Cookie', [
-      serializeSessionCookie(token),
-      `graveyard_user_id=${user.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
-    ]);
+    const token = createSessionToken(user.id, user.alias, user.sessionVersion);
+    res.setHeader('Set-Cookie', serializeSessionCookie(token));
 
     return res.status(201).json({
       message: 'Account created successfully',
@@ -172,29 +172,31 @@ async function handleSignup(req, res) {
 
 // 3. POST /api/auth/logout
 async function handleLogout(req, res) {
-  res.setHeader('Set-Cookie', [
-    serializeClearCookie(),
-    'graveyard_user_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
-  ]);
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // Signing out ends this account's sessions on every device, not just this browser.
+  try {
+    const user = await getSessionUser(req);
+    await signOutEverywhere(user.id);
+    await revokeGithubToken(user.githubTokenEnc);
+  } catch (err) {
+    if (!(err instanceof SessionError)) console.error('Logout cleanup failed:', err);
+  }
+  res.setHeader('Set-Cookie', [serializeClearCookie(), clearUserIdCookie]);
   return res.status(200).json({ message: 'Logged out successfully' });
 }
 
 // 4. GET /api/auth/me
 async function handleMe(req, res) {
   try {
-    // parseSession already handles the dev-only unsigned fallbacks.
-    const userId = parseSession(req);
-
-    if (!userId) {
-      return res.status(200).json({ authenticated: false, user: null });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    });
-
-    if (!user) {
-      return res.status(200).json({ authenticated: false, user: null });
+    res.setHeader('Cache-Control', 'no-store');
+    let user;
+    try {
+      user = await getSessionUser(req);
+    } catch (err) {
+      if (!(err instanceof SessionError)) throw err;
+      // A dead session: clear the cookie so the browser stops sending it.
+      res.setHeader('Set-Cookie', [serializeClearCookie(), clearUserIdCookie]);
+      return res.status(200).json({ authenticated: false, user: null, reason: err.code, message: err.message });
     }
 
     return res.status(200).json({
@@ -209,6 +211,7 @@ async function handleMe(req, res) {
 
 // 5. GET /api/auth/personas
 async function handlePersonas(req, res) {
+  if (!LOCAL_LOGINS) return res.status(200).json({ personas: [] });
   try {
     const users = await prisma.user.findMany({
       where: {
@@ -231,6 +234,7 @@ async function handlePersonas(req, res) {
 
 // 6. POST /api/auth/switch-persona
 async function handleSwitchPersona(req, res) {
+  if (!LOCAL_LOGINS) return githubOnly(res);
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -252,11 +256,8 @@ async function handleSwitchPersona(req, res) {
       return res.status(403).json({ error: 'Only the shared demo personas can be switched into. Log in to use a real account.' });
     }
 
-    const token = createSessionToken(user.id, user.alias);
-    res.setHeader('Set-Cookie', [
-      serializeSessionCookie(token),
-      `graveyard_user_id=${user.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
-    ]);
+    const token = createSessionToken(user.id, user.alias, user.sessionVersion);
+    res.setHeader('Set-Cookie', serializeSessionCookie(token));
 
     return res.status(200).json({
       message: `Switched active persona to ${user.alias}`,
@@ -364,6 +365,7 @@ async function handleGitHubCallback(req, res) {
   try {
     let ghUser = null;
     let userEmail = null;
+    let sealedToken = null;
 
     if (typeof code === 'string' && code.startsWith('mock_dev_code_') && process.env.NODE_ENV !== 'production') {
       const mockId = `mock_${code.slice(-6)}`;
@@ -423,6 +425,7 @@ async function handleGitHubCallback(req, res) {
 
       ghUser = await profileRes.json();
       userEmail = ghUser.email;
+      sealedToken = encryptToken(accessToken);
 
       if (!userEmail) {
         try {
@@ -436,7 +439,7 @@ async function handleGitHubCallback(req, res) {
           if (emailsRes.ok) {
             const emails = await emailsRes.json();
             if (Array.isArray(emails)) {
-              const primary = emails.find(e => e.primary && e.verified) || emails.find(e => e.verified) || emails[0];
+              const primary = emails.find(e => e.primary && e.verified) || emails.find(e => e.verified);
               if (primary && primary.email) {
                 userEmail = primary.email;
               }
@@ -455,96 +458,66 @@ async function handleGitHubCallback(req, res) {
     const cleanEmail = userEmail.toLowerCase();
     const githubIdStr = String(ghUser.id);
     const githubUsernameStr = ghUser.login;
+    // Saved on every sign-in so later requests can ask GitHub whether access is still granted.
+    const githubSession = { githubTokenEnc: sealedToken, githubCheckedAt: sealedToken ? new Date() : null };
 
-    const activeUserId = parseSession(req);
-    if (activeUserId) {
-      try {
-        await prisma.user.update({
-          where: { id: activeUserId },
-          data: {
-            githubId: githubIdStr,
-            githubUsername: githubUsernameStr
-          }
-        });
-        res.setHeader('Set-Cookie', clearStateCookie);
-        return res.redirect(302, '/dashboard?tab=anonymity&connected=github');
-      } catch (linkErr) {
-        console.error('Error linking GitHub account to active session:', linkErr);
-        res.setHeader('Set-Cookie', clearStateCookie);
-        return res.redirect(302, '/dashboard?tab=anonymity&error=github_already_linked');
-      }
+    let user = await prisma.user.findUnique({ where: { githubId: githubIdStr } });
+
+    // Connecting GitHub to the account you're signed into (only accounts with no GitHub yet,
+    // and only if this GitHub account isn't already someone else's).
+    let current = null;
+    try {
+      current = await getSessionUser(req);
+    } catch (err) {
+      if (!(err instanceof SessionError)) throw err;
     }
-
-    let user = await prisma.user.findUnique({
-      where: { githubId: githubIdStr }
-    });
-
-    if (user) {
-      if (user.githubUsername !== githubUsernameStr) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { githubUsername: githubUsernameStr }
-        });
-      }
+    if (current && !current.githubId && !user) {
+      user = await prisma.user.update({
+        where: { id: current.id },
+        data: { githubId: githubIdStr, githubUsername: githubUsernameStr, ...githubSession }
+      });
+    } else if (user) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { githubUsername: githubUsernameStr, ...githubSession }
+      });
     } else {
-      const existingByEmail = await prisma.user.findUnique({
-        where: { email: cleanEmail }
+      // A new account. Never attach to an existing account just because the email matches:
+      // that would let a GitHub user with someone else's address take over their account.
+      const emailTaken = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      let alias = generateAlias();
+      while (await prisma.user.findUnique({ where: { alias } })) alias = generateAlias();
+
+      user = await prisma.user.create({
+        data: {
+          email: emailTaken ? `${githubIdStr}+${githubUsernameStr}@users.noreply.github.com` : cleanEmail,
+          githubId: githubIdStr,
+          githubUsername: githubUsernameStr,
+          alias,
+          credits: 0,
+          reputation: 100,
+          ghostStrikes: 0,
+          banned: false,
+          ...githubSession
+        }
       });
 
-      if (existingByEmail) {
-        user = await prisma.user.update({
-          where: { id: existingByEmail.id },
-          data: {
-            githubId: githubIdStr,
-            githubUsername: githubUsernameStr
-          }
-        });
-      } else {
-        let alias = generateAlias();
-        let aliasExists = await prisma.user.findUnique({ where: { alias } });
-        while (aliasExists) {
-          alias = generateAlias();
-          aliasExists = await prisma.user.findUnique({ where: { alias } });
-        }
+      await recordLedgerEntry({
+        userId: user.id,
+        type: 'REWARD_CREDIT',
+        amount: 500,
+        repDelta: 0,
+        notes: 'Initial onboarding credits genesis grant (GitHub OAuth)'
+      });
 
-        user = await prisma.user.create({
-          data: {
-            email: cleanEmail,
-            githubId: githubIdStr,
-            githubUsername: githubUsernameStr,
-            alias,
-            credits: 0,
-            reputation: 100,
-            ghostStrikes: 0,
-            banned: false
-          }
-        });
-
-        await recordLedgerEntry({
-          userId: user.id,
-          type: 'REWARD_CREDIT',
-          amount: 500,
-          repDelta: 0,
-          notes: 'Initial onboarding credits genesis grant (GitHub OAuth)'
-        });
-
-        user = await prisma.user.findUnique({ where: { id: user.id } });
-      }
+      user = await prisma.user.findUnique({ where: { id: user.id } });
     }
 
-    if (user.banned) {
-      res.setHeader('Set-Cookie', clearStateCookie);
-      return res.redirect(302, '/login?error=account_banned');
-    }
+    // Banned accounts can still sign in and list projects; they just can't claim.
+    const token = createSessionToken(user.id, user.alias, user.sessionVersion);
+    res.setHeader('Set-Cookie', [clearStateCookie, serializeSessionCookie(token), clearUserIdCookie]);
 
-    const token = createSessionToken(user.id, user.alias);
-    res.setHeader('Set-Cookie', [
-      clearStateCookie,
-      serializeSessionCookie(token),
-      `graveyard_user_id=${user.id}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
-    ]);
-
-    return res.redirect(302, '/dashboard');
+    return res.redirect(302, current ? '/dashboard?tab=anonymity&connected=github' : '/dashboard');
   } catch (err) {
     console.error('GitHub OAuth callback processing exception:', err);
     res.setHeader('Set-Cookie', clearStateCookie);

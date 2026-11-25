@@ -23,6 +23,11 @@ model User {
   banned         Boolean       @default(false)
   createdAt      DateTime      @default(now())
 
+  // Sessions: bumping sessionVersion signs this user out everywhere (logout, GitHub access revoked).
+  sessionVersion  Int       @default(0)
+  githubTokenEnc  String?   // encrypted GitHub OAuth token, used only to check access is still granted
+  githubCheckedAt DateTime? // last time GitHub confirmed the token is still valid
+
   // Relations
   ownedProjects Project[]    @relation("ProjectOwner")
   commitments   Commitment[] @relation("TakerCommitment")

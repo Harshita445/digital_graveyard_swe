@@ -1,4 +1,4 @@
-import { parseSession } from '../../../lib/auth';
+import { requireUser } from '../../../lib/session';
 import { checkFork, quitClaim, endRequest, ClaimError } from '../../../lib/claims';
 
 /**
@@ -14,8 +14,9 @@ export default async function handler(req, res) {
   if (!slug || slug.length < 2) return res.status(404).json({ error: 'Endpoint not found' });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const userId = parseSession(req);
-  if (!userId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  const me = await requireUser(req, res, { write: true });
+  if (!me) return;
+  const userId = me.id;
 
   const [commitmentId, action] = slug;
   try {

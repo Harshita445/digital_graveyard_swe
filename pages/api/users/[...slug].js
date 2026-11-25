@@ -1,5 +1,6 @@
 import prisma from '../../../lib/prisma';
-import { parseSession, sanitizeUser } from '../../../lib/auth';
+import { sanitizeUser } from '../../../lib/auth';
+import { requireUser } from '../../../lib/session';
 
 /**
  * Unified Users API Route Handler
@@ -92,10 +93,9 @@ async function handleLeaderboard(req, res) {
 // 1. GET /api/users/me
 async function handleGetMe(req, res) {
   try {
-    const userId = parseSession(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const me = await requireUser(req, res);
+    if (!me) return;
+    const userId = me.id;
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -150,10 +150,9 @@ async function handleGetMe(req, res) {
 // 2. GET /api/users/me/ledger
 async function handleGetLedger(req, res) {
   try {
-    const userId = parseSession(req);
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    const me = await requireUser(req, res);
+    if (!me) return;
+    const userId = me.id;
 
     const ledger = await prisma.ledgerEntry.findMany({
       where: { userId },

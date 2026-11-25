@@ -2,7 +2,7 @@ import { createYoga, createSchema } from 'graphql-yoga';
 import { typeDefs } from '../../lib/graphql/typeDefs.js';
 import { resolvers } from '../../lib/graphql/resolvers.js';
 import prisma from '../../lib/prisma.js';
-import { parseSession } from '../../lib/auth.js';
+import { optionalUser } from '../../lib/session.js';
 
 export const config = {
   api: {
@@ -23,16 +23,9 @@ export default createYoga({
   context: async ({ req }) => {
     let currentUser = null;
     try {
-      const userId = parseSession(req);
-      if (userId) {
-        try {
-          currentUser = await prisma.user.findUnique({ where: { id: userId } });
-        } catch (dbErr) {
-          currentUser = null;
-        }
-      }
+      currentUser = await optionalUser(req);
     } catch (e) {
-      // Ignored
+      currentUser = null;
     }
 
     return {

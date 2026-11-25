@@ -55,8 +55,8 @@ export function AppProvider({ children }) {
         // Handled below
       }
 
-      // If user previously authenticated and stored ID is present, verify in known list
-      const storedId = typeof window !== 'undefined' ? localStorage.getItem('graveyard_active_user_id') : null;
+      // Static demo build only (no server): remember the chosen demo persona locally.
+      const storedId = STATIC_DEMO && typeof window !== 'undefined' ? localStorage.getItem('graveyard_active_user_id') : null;
       if (storedId) {
         const existing = personaList.find(p => p.id === storedId);
         if (existing) {
@@ -208,21 +208,38 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Refresh user metrics (balance, reputation, strikes)
-  const refreshUser = async () => {
-    if (!currentUser) return;
+  // 6. Refresh user metrics (balance, reputation, strikes). If the server says the session is
+  //    gone (signed out elsewhere, GitHub access revoked), drop the signed-in state here too.
+  const refreshUser = useCallback(async () => {
+    if (STATIC_DEMO) return;
     try {
-      const res = await fetch('/api/auth/me');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          setCurrentUser(data.user);
-        }
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        setCurrentUser(data.user);
+        return;
       }
+      setCurrentUser(prev => {
+        if (prev) addToast(data.message || 'You were signed out. Please sign in again.', 'info');
+        return null;
+      });
+      localStorage.removeItem('graveyard_active_user_id');
     } catch (err) {
       console.error('Error refreshing user:', err);
     }
-  };
+  }, [addToast]);
+
+  // Re-check the session whenever the tab comes back into view.
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshUser(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [refreshUser]);
 
   return (
     <AppContext.Provider

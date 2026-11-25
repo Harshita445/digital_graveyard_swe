@@ -19,7 +19,8 @@
     "dev:local": "node scripts/local-db.mjs --dev",
     "seed:graves": "node scripts/seed-open-graves.mjs",
     "test:security": "node scripts/test-graphql-security.mjs",
-    "test:claims": "node --no-warnings scripts/test-claims.mjs"
+    "test:claims": "node --no-warnings scripts/test-claims.mjs",
+    "test:sessions": "node --no-warnings scripts/test-sessions.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

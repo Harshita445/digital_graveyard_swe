@@ -55,6 +55,12 @@ export default function Dashboard() {
         setLoading(false);
         return;
       }
+      if (res.status === 401) {
+        // Session ended (signed out elsewhere or GitHub access revoked): never show demo data instead.
+        setLoading(false);
+        await refreshUser();
+        return;
+      }
     } catch (err) {
       // Handled in demo fallback below
     }

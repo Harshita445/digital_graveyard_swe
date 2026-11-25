@@ -9,7 +9,7 @@ import { PLEDGE, PROOF_DAYS, MIN_NEW_COMMITS, CLAIM_DAY_OPTIONS, DEFAULT_CLAIM_D
 
 export default function SubmitProject() {
   const router = useRouter();
-  const { currentUser, addToast } = useApp();
+  const { currentUser, addToast, refreshUser } = useApp();
 
   const [gitRepoUrl, setGitRepoUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -46,6 +46,7 @@ export default function SubmitProject() {
         router.push(`/project/${data.project.id}`);
         return;
       }
+      if (res.status === 401) { await refreshUser(); return; }
       setSuggestResult({ ok: false, text: data.error || 'That repository could not be listed.', projectId: data.projectId });
     } catch (err) {
       setSuggestResult({ ok: false, text: 'Could not reach the server. Check your connection and try again.' });
@@ -86,6 +87,7 @@ export default function SubmitProject() {
         router.push(`/project/${data.project.id}`);
         return;
       }
+      if (res.status === 401) { await refreshUser(); return; }
       // Show the server's reason (not yours to list, missing "done when", etc.).
       addToast(data?.error || 'That project could not be listed.', 'error');
       if (data?.projectId) router.push(`/project/${data.projectId}`);

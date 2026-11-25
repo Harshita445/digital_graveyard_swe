@@ -1,10 +1,11 @@
 import prisma from '../../../lib/prisma';
-import { parseSession } from '../../../lib/auth';
+import { requireUser, optionalUser } from '../../../lib/session';
 import { reviversOf } from '../../../lib/revivers';
 import { claimProject, approveRequest, endRequest, ClaimError } from '../../../lib/claims';
 import { PLEDGE, PROOF_DAYS, REQUEST_DAYS, MIN_NEW_COMMITS } from '../../../lib/claimRules';
 import { enrichProject } from '../../../lib/mockFallback';
 import { analyzeGitHubRepository } from '../../../lib/githubIntelligence';
+import { requesterProfile } from '../../../lib/requesterProfile';
 
 /**
  * Unified Project Details & Actions Route Handler
@@ -53,8 +54,9 @@ async function handleAnalyze(req, res, id) {
   }
 
   try {
-    const ownerId = parseSession(req);
-    if (!ownerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+    const me = await requireUser(req, res, { write: true });
+    if (!me) return;
+    const ownerId = me.id;
 
     const project = await prisma.project.findUnique({ where: { id } });
     if (!project) return res.status(404).json({ error: 'Project not found' });
@@ -73,7 +75,7 @@ async function handleAnalyze(req, res, id) {
 // 1. GET /api/projects/:id
 async function handleGetProject(req, res, id) {
   try {
-    const currentUserId = parseSession(req);
+    const currentUserId = (await optionalUser(req))?.id || null;
 
     const project = await prisma.project.findUnique({
       where: { id },
@@ -109,11 +111,17 @@ async function handleGetProject(req, res, id) {
     const isOwner = !isOpenGrave && currentUserId === project.ownerId;
     const isTaker = Boolean(activeCommitment && currentUserId && currentUserId === activeCommitment.takerId);
 
+    // The owner reviews who is asking before approving: their GitHub and their record here.
+    const requester = isOwner && activeCommitment && ['PENDING_APPROVAL', 'ACTIVE'].includes(activeCommitment.status)
+      ? await requesterProfile(activeCommitment.takerId)
+      : null;
+
     return res.status(200).json({
       project: enrichProject(project),
       activeCommitment,
       revivers: isOpenGrave ? reviversOf(project.commitments) : [],
-      userRole: isOwner ? 'OWNER' : isTaker ? 'TAKER' : 'GUEST'
+      userRole: isOwner ? 'OWNER' : isTaker ? 'TAKER' : 'GUEST',
+      requester
     });
   } catch (err) {
     console.error('Error fetching project:', err);
@@ -131,8 +139,9 @@ function sendClaimError(res, err, fallback) {
 // 2. POST /api/projects/:id/commit  (claim)
 async function handleCommit(req, res, id) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const takerId = parseSession(req);
-  if (!takerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  const me = await requireUser(req, res, { write: true });
+  if (!me) return;
+  const takerId = me.id;
 
   try {
     const { commitment, project } = await claimProject(id, takerId);
@@ -148,8 +157,9 @@ async function handleCommit(req, res, id) {
 // 3. POST /api/projects/:id/approve  (donated: owner picks who gets the claim)
 async function handleApprove(req, res, id) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const ownerId = parseSession(req);
-  if (!ownerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  const me = await requireUser(req, res, { write: true });
+  if (!me) return;
+  const ownerId = me.id;
 
   try {
     const commitment = await approveRequest(id, ownerId, (req.body || {}).commitmentId);
@@ -165,8 +175,9 @@ async function handleApprove(req, res, id) {
 // 4. POST /api/projects/:id/reject  (donated: owner declines; the pledge goes back)
 async function handleReject(req, res, id) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const ownerId = parseSession(req);
-  if (!ownerId) return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  const me = await requireUser(req, res, { write: true });
+  if (!me) return;
+  const ownerId = me.id;
 
   try {
     const { commitmentId } = req.body || {};
